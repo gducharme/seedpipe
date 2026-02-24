@@ -1,0 +1,11 @@
+pipeline_id: phase1-seed-minimal
+item_unit: item
+determinism_policy: strict
+stages:
+  - id: ingest
+    mode: whole_run
+    outputs: [items.jsonl]
+  - id: validate
+    mode: whole_run
+    inputs: [items.jsonl]
+    outputs: [validation.json]

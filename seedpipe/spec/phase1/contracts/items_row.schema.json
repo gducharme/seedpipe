@@ -2,9 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "seedpipe://spec/phase1/contracts/items_row.schema.json",
   "title": "ItemsRow",
-  "description": "Schema for a single JSON object line in items.jsonl. Minimal, pipeline-generic unit of work.",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "required": ["item_id"],
   "properties": {
     "item_id": {

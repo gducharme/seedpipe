@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "seedpipe://spec/phase1/contracts/item_state_row.schema.json",
+  "title": "ItemStateRow",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "item_id", "state", "updated_at"],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Run identifier that this row belongs to."
+    },
+    "item_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Generic unit of work identifier (e.g., paragraph_id, record_id, doc_id)."
+    },
+    "item_unit": {
+      "type": "string",
+      "minLength": 1,
+      "default": "item",
+      "description": "Optional semantic label for the unit (e.g., 'paragraph')."
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "in_progress",
+        "succeeded",
+        "failed",
+        "skipped",
+        "quarantined"
+      ],
+      "description": "Coarse lifecycle state for the item."
+    },
+    "stage_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stage that last mutated the item state."
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Attempt number for this stage+item execution (1-based)."
+    },
+    "prev_state": {
+      "type": "string",
+      "description": "Optional previous state for audit / transition validation."
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Optional human-readable reason for failure/skip/quarantine."
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "details": { "type": "object", "description": "Optional structured debug payload." }
+      },
+      "description": "Optional structured error."
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "Optional references to artifacts produced for this item (or relevant to the item).",
+      "items": { "$ref": "seedpipe://spec/phase1/contracts/artifact_ref.schema.json" }
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC3339 timestamp when this row was written."
+    }
+  }
+}

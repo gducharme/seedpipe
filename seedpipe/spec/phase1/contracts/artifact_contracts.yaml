@@ -1,0 +1,12 @@
+items.jsonl:
+  kind: jsonl
+  row_schema: items_row.schema.json
+item_state.jsonl:
+  kind: jsonl
+  row_schema: item_state_row.schema.json
+manifest.json:
+  kind: json
+  schema: manifest.schema.json
+validation.json:
+  kind: json
+  schema: validation.schema.json
