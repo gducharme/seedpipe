@@ -5,9 +5,31 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 from pathlib import Path
 from typing import Any
+
+@dataclass
+class ProducedBy:
+    run_id: str
+    stage_id: str
+    attempt: int = 1
+
+@dataclass
+class ArtifactRef:
+    name: str
+    path: str
+    hash: str
+    schema_version: str
+    produced_by: ProducedBy
+    bytes: int | None = None
+
+@dataclass
+class ItemResult:
+    item_id: str
+    ok: bool
+    error: dict[str, Any] | None = None
 
 CONTRACTS: dict[str, dict[str, Any]] = {
   "artifact_ref.schema.json": {

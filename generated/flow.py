@@ -6,41 +6,73 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 
 from seedpipe.generated.stages import ingest as stage_ingest
 from seedpipe.generated.stages import transform as stage_transform
 from seedpipe.generated.stages import validate as stage_validate
 from seedpipe.generated.stages import publish as stage_publish
 
-from seedpipe.src.runtime import Runtime
+from seedpipe.runtime.ctx import StageContext
+from seedpipe.runtime.items import iter_items_deterministic
+from seedpipe.runtime.state import append_item_state_row
 
 PIPELINE_ID = 'phase1-default'
 ITEM_UNIT = 'item'
 DETERMINISM_POLICY = 'strict'
 STAGES = ['ingest', 'transform', 'validate', 'publish']
 
-def run(run_id: str | None = None) -> str:
-    runtime = Runtime(
-        pipeline_id=PIPELINE_ID,
-        item_unit=ITEM_UNIT,
-        determinism_policy=DETERMINISM_POLICY,
-        stage_order=STAGES,
-        run_id=run_id,
-    )
-    runtime.start()
-    runtime.run_whole_stage('ingest', stage_ingest.run_stage)
-    runtime.run_per_item_stage('transform', stage_transform.run_stage)
-    runtime.run_whole_stage('validate', stage_validate.run_stage)
-    runtime.run_whole_stage('publish', stage_publish.run_stage)
-    runtime.finish()
-    return runtime.run_id
+def now_rfc3339() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+def run(run_id: str, attempt: int = 1) -> int:
+    ctx_base = StageContext.make_base(run_id=run_id)
+    ctx = ctx_base.for_stage('ingest', attempt=attempt)
+    stage_ingest.run_whole(ctx)
+    ctx = ctx_base.for_stage('transform', attempt=attempt)
+    for item in iter_items_deterministic(ctx, items_artifact='items.jsonl'):
+        item_id = item['item_id']
+        append_item_state_row({
+            'run_id': run_id,
+            'item_id': item_id,
+            'state': 'in_progress',
+            'stage_id': 'transform',
+            'attempt': attempt,
+            'updated_at': now_rfc3339(),
+        })
+        res = stage_transform.run_item(ctx, item)
+        if res.ok:
+            append_item_state_row({
+                'run_id': run_id,
+                'item_id': item_id,
+                'state': 'succeeded',
+                'stage_id': 'transform',
+                'attempt': attempt,
+                'updated_at': now_rfc3339(),
+            })
+        else:
+            append_item_state_row({
+                'run_id': run_id,
+                'item_id': item_id,
+                'state': 'failed',
+                'stage_id': 'transform',
+                'attempt': attempt,
+                'error': res.error,
+                'updated_at': now_rfc3339(),
+            })
+    ctx = ctx_base.for_stage('validate', attempt=attempt)
+    stage_validate.run_whole(ctx)
+    ctx = ctx_base.for_stage('publish', attempt=attempt)
+    stage_publish.run_whole(ctx)
+    return 0
 
 def main() -> None:
     parser = argparse.ArgumentParser(description='Run generated Seedpipe flow')
-    parser.add_argument('--run-id', default=None)
+    parser.add_argument('--run-id', required=True)
+    parser.add_argument('--attempt', type=int, default=1)
     args = parser.parse_args()
-    run_id = run(run_id=args.run_id)
-    print(run_id)
+    code = run(run_id=args.run_id, attempt=args.attempt)
+    raise SystemExit(code)
 
 if __name__ == '__main__':
     main()

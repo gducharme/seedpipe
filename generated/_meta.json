@@ -2,15 +2,16 @@
   "compiler_version": "phase1-mvp",
   "contracts_hash": "sha256:270bb4263e97bd97aae1dd6d4657fa2ea7c30d87fc1b6ea9c3b8e97d2d723028",
   "emitted_files": {
-    "generated/compile_report.json": "sha256:8453392b02ad83dce4e74f099f836014d27523b0a0dc4bcabf6972ebed815da4",
-    "generated/flow.py": "sha256:92ee929ec358d61412fb27b466c1400dbcf2d616d144b0fc3fa1a4930234bbb3",
+    "generated/compile_report.json": "sha256:4b19c2310ca50168d792f319b953328629487df7e382c2f7b20fb55c113c1aa2",
+    "generated/flow.py": "sha256:d4bc8ac524cf549c638d84c531574d49080d9daa203a074c969cf0610f36d58a",
     "generated/ir.json": "sha256:c63cbf5ffb2622ac50fa1f3294da4a855935156b6237c6971d6a9c0dc4b0da7f",
-    "generated/models.py": "sha256:23728a749e42a82512e3961089644470efc27785fc8a73608fbdecd4063f8bcc",
-    "generated/stages/ingest.py": "sha256:00968c726d68f9fd58343d2cc8d669bc7be1fb09a730dd40bd2dce9a6b7feb6f",
-    "generated/stages/publish.py": "sha256:5ddf8b17dddcd049d881fa6469acf1e6e5d0f7b01442067bafa1681dfb683ba8",
-    "generated/stages/transform.py": "sha256:a9f4b7a4c30539f267f90cc7bc65ce5b9b11eef6e0760f522d77653b85210410",
-    "generated/stages/validate.py": "sha256:01840d568367c7715d9260e4092725d2d19d7379e4e4baadba251d48a016ffe8"
+    "generated/models.py": "sha256:eeb26bacfabd9ca12096eab4dfe91a22c136ab670a38c4474ddf1c6230305e0b",
+    "generated/stages/__init__.py": "sha256:6948d1c75ce6374b8e463ce1fe2e3c2872e5a40d771fa284644b8787c3fb9604",
+    "generated/stages/ingest.py": "sha256:03d04d538a97eecb0deb4ebbf581c877ed90485e4845e871e7a8009bafd8f690",
+    "generated/stages/publish.py": "sha256:1eefeacc795cd3e6100168dcdda556be639e5601bcf0b7d186a7b1a032d8ca1a",
+    "generated/stages/transform.py": "sha256:ba385b8fb12c24a168dbf2ee87504d620704a6ea4a9f542713f0a192a663b827",
+    "generated/stages/validate.py": "sha256:d059a4f82d4208e1561c6fd4f375f94a74cff57c95c33981dccb594cad5e83e1"
   },
-  "generated_at": "2026-02-24T10:04:12.187647+00:00",
+  "generated_at": "2026-02-24T10:42:46.559472+00:00",
   "pipeline_hash": "sha256:a2202c6c1682d7933dc7d76ddae71ad43cbb0ce875f1b109ce843e8e1bc47057"
 }

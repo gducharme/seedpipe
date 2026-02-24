@@ -7,16 +7,25 @@ from __future__ import annotations
 
 from typing import Any
 
-from seedpipe.src.runtime import StageContext, StageResult
-from seedpipe.src.stages import transform as human_stage
+from seedpipe.runtime.ctx import StageContext
+from seedpipe.generated.models import ItemResult
+from seedpipe.src.stages import transform as impl
 
 STAGE_ID = 'transform'
 MODE = 'per_item'
 INPUTS = ['items.jsonl']
 OUTPUTS = ['transformed.jsonl']
 
-def run_stage(ctx: StageContext) -> StageResult:
+def run_item(ctx: StageContext, item: dict[str, Any]) -> ItemResult:
     ctx.validate_inputs(STAGE_ID, INPUTS)
-    result: Any = human_stage.run(ctx, item=ctx.item if MODE == 'per_item' else None)
-    ctx.validate_outputs(STAGE_ID, OUTPUTS)
-    return StageResult.from_human_result(stage_id=STAGE_ID, value=result)
+    item_id = item.get('item_id', '')
+    try:
+        impl.run_item(ctx, item)
+        ctx.validate_outputs(STAGE_ID, OUTPUTS)
+        return ItemResult(item_id=str(item_id), ok=True)
+    except Exception as exc:
+        return ItemResult(
+            item_id=str(item_id),
+            ok=False,
+            error={'code': 'stage_exception', 'message': str(exc)},
+        )
