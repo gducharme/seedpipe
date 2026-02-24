@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "seedpipe://spec/phase1/contracts/validation.schema.json",
+  "type": "object",
+  "required": ["ok", "item_count"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": {"type": "boolean"},
+    "item_count": {"type": "integer", "minimum": 0}
+  }
+}
