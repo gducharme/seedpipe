@@ -1,0 +1,51 @@
+{
+  "artifact_producers": {
+    "items.jsonl": "ingest",
+    "published_manifest.json": "publish",
+    "transformed.jsonl": "transform",
+    "validation_report.json": "validate"
+  },
+  "determinism_policy": "strict",
+  "item_unit": "item",
+  "pipeline_id": "phase1-default",
+  "stages": [
+    {
+      "inputs": [],
+      "mode": "whole_run",
+      "outputs": [
+        "items.jsonl"
+      ],
+      "stage_id": "ingest"
+    },
+    {
+      "inputs": [
+        "items.jsonl"
+      ],
+      "mode": "per_item",
+      "outputs": [
+        "transformed.jsonl"
+      ],
+      "stage_id": "transform"
+    },
+    {
+      "inputs": [
+        "transformed.jsonl"
+      ],
+      "mode": "whole_run",
+      "outputs": [
+        "validation_report.json"
+      ],
+      "stage_id": "validate"
+    },
+    {
+      "inputs": [
+        "validation_report.json"
+      ],
+      "mode": "whole_run",
+      "outputs": [
+        "published_manifest.json"
+      ],
+      "stage_id": "publish"
+    }
+  ]
+}

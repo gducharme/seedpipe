@@ -1,0 +1,20 @@
+{
+  "artifact_schema_map": {
+    "items.jsonl": "items_row.schema.json",
+    "published_manifest.json": "manifest.schema.json",
+    "transformed.jsonl": "artifact_ref.schema.json",
+    "validation_report.json": "artifact_ref.schema.json"
+  },
+  "compiler_version": "phase1-mvp",
+  "emitted_files": {
+    "generated/flow.py": "sha256:92ee929ec358d61412fb27b466c1400dbcf2d616d144b0fc3fa1a4930234bbb3",
+    "generated/ir.json": "sha256:c63cbf5ffb2622ac50fa1f3294da4a855935156b6237c6971d6a9c0dc4b0da7f",
+    "generated/models.py": "sha256:23728a749e42a82512e3961089644470efc27785fc8a73608fbdecd4063f8bcc",
+    "generated/stages/ingest.py": "sha256:00968c726d68f9fd58343d2cc8d669bc7be1fb09a730dd40bd2dce9a6b7feb6f",
+    "generated/stages/publish.py": "sha256:5ddf8b17dddcd049d881fa6469acf1e6e5d0f7b01442067bafa1681dfb683ba8",
+    "generated/stages/transform.py": "sha256:a9f4b7a4c30539f267f90cc7bc65ce5b9b11eef6e0760f522d77653b85210410",
+    "generated/stages/validate.py": "sha256:01840d568367c7715d9260e4092725d2d19d7379e4e4baadba251d48a016ffe8"
+  },
+  "pipeline_id": "phase1-default",
+  "warnings": []
+}
