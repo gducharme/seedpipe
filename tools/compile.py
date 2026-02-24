@@ -235,9 +235,28 @@ def emit_models_py(contracts: dict[str, dict[str, Any]], meta: dict[str, str]) -
     return (
         generated_banner(meta)
         + "from __future__ import annotations\n\n"
+        + "from dataclasses import dataclass\n"
         + "import json\n"
         + "from pathlib import Path\n"
         + "from typing import Any\n\n"
+        + "@dataclass\n"
+        + "class ProducedBy:\n"
+        + "    run_id: str\n"
+        + "    stage_id: str\n"
+        + "    attempt: int = 1\n\n"
+        + "@dataclass\n"
+        + "class ArtifactRef:\n"
+        + "    name: str\n"
+        + "    path: str\n"
+        + "    hash: str\n"
+        + "    schema_version: str\n"
+        + "    produced_by: ProducedBy\n"
+        + "    bytes: int | None = None\n\n"
+        + "@dataclass\n"
+        + "class ItemResult:\n"
+        + "    item_id: str\n"
+        + "    ok: bool\n"
+        + "    error: dict[str, Any] | None = None\n\n"
         + f"CONTRACTS: dict[str, dict[str, Any]] = {stable_json(contracts)}\n"
         + "\n"
         + "def get_schema(name: str) -> dict[str, Any]:\n"
@@ -255,22 +274,53 @@ def python_string_list(values: tuple[str, ...]) -> str:
 
 
 def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
+    mode_fn = "run_whole" if stage.mode == "whole_run" else "run_item"
+    wrapper_name = mode_fn
+    mode_signature = "ctx: StageContext" if stage.mode == "whole_run" else "ctx: StageContext, item: dict[str, Any]"
+    mode_call = "impl.run_whole(ctx)" if stage.mode == "whole_run" else "impl.run_item(ctx, item)"
+    item_result_return = (
+        "    item_id = item.get('item_id', '')\n"
+        "    try:\n"
+        f"        {mode_call}\n"
+        "        ctx.validate_outputs(STAGE_ID, OUTPUTS)\n"
+        "        return ItemResult(item_id=str(item_id), ok=True)\n"
+        "    except Exception as exc:\n"
+        "        return ItemResult(\n"
+        "            item_id=str(item_id),\n"
+        "            ok=False,\n"
+        "            error={'code': 'stage_exception', 'message': str(exc)},\n"
+        "        )\n"
+    )
+    whole_return = (
+        f"    {mode_call}\n"
+        "    ctx.validate_outputs(STAGE_ID, OUTPUTS)\n"
+    )
     return (
         generated_banner(meta)
         + "from __future__ import annotations\n\n"
         + "from typing import Any\n\n"
-        + "from seedpipe.src.runtime import StageContext, StageResult\n"
-        + f"from seedpipe.src.stages import {stage.stage_id} as human_stage\n\n"
+        + "from seedpipe.runtime.ctx import StageContext\n"
+        + "from seedpipe.generated.models import ItemResult\n"
+        + f"from seedpipe.src.stages import {stage.stage_id} as impl\n\n"
         + f"STAGE_ID = {stage.stage_id!r}\n"
         + f"MODE = {stage.mode!r}\n"
         + f"INPUTS = {python_string_list(stage.inputs)}\n"
         + f"OUTPUTS = {python_string_list(stage.outputs)}\n\n"
-        + "def run_stage(ctx: StageContext) -> StageResult:\n"
+        + f"def {wrapper_name}({mode_signature})"
+        + (" -> None:\n" if stage.mode == "whole_run" else " -> ItemResult:\n")
         + "    ctx.validate_inputs(STAGE_ID, INPUTS)\n"
-        + "    result: Any = human_stage.run(ctx, item=ctx.item if MODE == 'per_item' else None)\n"
-        + "    ctx.validate_outputs(STAGE_ID, OUTPUTS)\n"
-        + "    return StageResult.from_human_result(stage_id=STAGE_ID, value=result)\n"
+        + (whole_return if stage.mode == "whole_run" else item_result_return)
     )
+
+
+def emit_stages_init_py(ir: PipelineIR, meta: dict[str, str]) -> str:
+    lines = [generated_banner(meta), "from __future__ import annotations\n\n"]
+    for stage in ir.stages:
+        lines.append(f"from . import {stage.stage_id}\n")
+    lines.append("\n")
+    all_exports = ", ".join(repr(stage.stage_id) for stage in ir.stages)
+    lines.append(f"__all__ = [{all_exports}]\n")
+    return "".join(lines)
 
 
 def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
@@ -283,41 +333,68 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
     for stage in ir.stages:
         stage_mod_name = re.sub(r"[^a-zA-Z0-9_]", "_", stage.stage_id)
         if stage.mode == "whole_run":
-            call_lines.append(f"    runtime.run_whole_stage({stage.stage_id!r}, stage_{stage_mod_name}.run_stage)")
+            call_lines.append(f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt)")
+            call_lines.append(f"    stage_{stage_mod_name}.run_whole(ctx)")
         else:
-            call_lines.append(
-                f"    runtime.run_per_item_stage({stage.stage_id!r}, stage_{stage_mod_name}.run_stage)"
-            )
+            call_lines.append(f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt)")
+            call_lines.append("    for item in iter_items_deterministic(ctx, items_artifact='items.jsonl'):")
+            call_lines.append("        item_id = item['item_id']")
+            call_lines.append("        append_item_state_row({")
+            call_lines.append("            'run_id': run_id,")
+            call_lines.append("            'item_id': item_id,")
+            call_lines.append("            'state': 'in_progress',")
+            call_lines.append(f"            'stage_id': {stage.stage_id!r},")
+            call_lines.append("            'attempt': attempt,")
+            call_lines.append("            'updated_at': now_rfc3339(),")
+            call_lines.append("        })")
+            call_lines.append(f"        res = stage_{stage_mod_name}.run_item(ctx, item)")
+            call_lines.append("        if res.ok:")
+            call_lines.append("            append_item_state_row({")
+            call_lines.append("                'run_id': run_id,")
+            call_lines.append("                'item_id': item_id,")
+            call_lines.append("                'state': 'succeeded',")
+            call_lines.append(f"                'stage_id': {stage.stage_id!r},")
+            call_lines.append("                'attempt': attempt,")
+            call_lines.append("                'updated_at': now_rfc3339(),")
+            call_lines.append("            })")
+            call_lines.append("        else:")
+            call_lines.append("            append_item_state_row({")
+            call_lines.append("                'run_id': run_id,")
+            call_lines.append("                'item_id': item_id,")
+            call_lines.append("                'state': 'failed',")
+            call_lines.append(f"                'stage_id': {stage.stage_id!r},")
+            call_lines.append("                'attempt': attempt,")
+            call_lines.append("                'error': res.error,")
+            call_lines.append("                'updated_at': now_rfc3339(),")
+            call_lines.append("            })")
 
     return (
         generated_banner(meta)
         + "from __future__ import annotations\n\n"
-        + "import argparse\n\n"
+        + "import argparse\n"
+        + "from datetime import datetime, timezone\n\n"
         + imports
         + "\n\n"
-        + "from seedpipe.src.runtime import Runtime\n\n"
+        + "from seedpipe.runtime.ctx import StageContext\n"
+        + "from seedpipe.runtime.items import iter_items_deterministic\n"
+        + "from seedpipe.runtime.state import append_item_state_row\n\n"
         + f"PIPELINE_ID = {ir.pipeline_id!r}\n"
         + f"ITEM_UNIT = {ir.item_unit!r}\n"
         + f"DETERMINISM_POLICY = {ir.determinism_policy!r}\n"
         + f"STAGES = {stage_ids!r}\n\n"
-        + "def run(run_id: str | None = None) -> str:\n"
-        + "    runtime = Runtime(\n"
-        + "        pipeline_id=PIPELINE_ID,\n"
-        + "        item_unit=ITEM_UNIT,\n"
-        + "        determinism_policy=DETERMINISM_POLICY,\n"
-        + "        stage_order=STAGES,\n"
-        + "        run_id=run_id,\n"
-        + "    )\n"
-        + "    runtime.start()\n"
+        + "def now_rfc3339() -> str:\n"
+        + "    return datetime.now(timezone.utc).isoformat()\n\n"
+        + "def run(run_id: str, attempt: int = 1) -> int:\n"
+        + "    ctx_base = StageContext.make_base(run_id=run_id)\n"
         + "\n".join(call_lines)
-        + "\n    runtime.finish()\n"
-        + "    return runtime.run_id\n\n"
+        + "\n    return 0\n\n"
         + "def main() -> None:\n"
         + "    parser = argparse.ArgumentParser(description='Run generated Seedpipe flow')\n"
-        + "    parser.add_argument('--run-id', default=None)\n"
+        + "    parser.add_argument('--run-id', required=True)\n"
+        + "    parser.add_argument('--attempt', type=int, default=1)\n"
         + "    args = parser.parse_args()\n"
-        + "    run_id = run(run_id=args.run_id)\n"
-        + "    print(run_id)\n\n"
+        + "    code = run(run_id=args.run_id, attempt=args.attempt)\n"
+        + "    raise SystemExit(code)\n\n"
         + "if __name__ == '__main__':\n"
         + "    main()\n"
     )
@@ -363,6 +440,9 @@ def compile_pipeline(paths: CompilePaths, *, emit_debug_ir: bool = True) -> dict
     for stage in ir.stages:
         path = paths.output_dir / "stages" / f"{stage.stage_id}.py"
         emitted_hashes[str(path.as_posix())] = write_file(path, emit_stage_wrapper(stage, meta))
+
+    stages_init_path = paths.output_dir / "stages" / "__init__.py"
+    emitted_hashes[str(stages_init_path.as_posix())] = write_file(stages_init_path, emit_stages_init_py(ir, meta))
 
     if emit_debug_ir:
         ir_path = paths.output_dir / "ir.json"

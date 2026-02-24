@@ -124,6 +124,16 @@ class CompilePipelineTests(unittest.TestCase):
             self.assertTrue((output_dir / "flow.py").exists())
             self.assertTrue((output_dir / "models.py").exists())
             self.assertTrue((output_dir / "stages" / "ingest.py").exists())
+            self.assertTrue((output_dir / "stages" / "__init__.py").exists())
+
+            flow_text = (output_dir / "flow.py").read_text()
+            self.assertIn("append_item_state_row", flow_text)
+
+            ingest_wrapper = (output_dir / "stages" / "ingest.py").read_text()
+            self.assertIn("def run_whole", ingest_wrapper)
+
+            stages_init = (output_dir / "stages" / "__init__.py").read_text()
+            self.assertIn("__all__", stages_init)
 
             compile_report = json.loads((output_dir / "compile_report.json").read_text())
             self.assertEqual(

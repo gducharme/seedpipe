@@ -7,16 +7,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from seedpipe.src.runtime import StageContext, StageResult
-from seedpipe.src.stages import publish as human_stage
+from seedpipe.runtime.ctx import StageContext
+from seedpipe.generated.models import ItemResult
+from seedpipe.src.stages import publish as impl
 
 STAGE_ID = 'publish'
 MODE = 'whole_run'
 INPUTS = ['validation_report.json']
 OUTPUTS = ['published_manifest.json']
 
-def run_stage(ctx: StageContext) -> StageResult:
+def run_whole(ctx: StageContext) -> None:
     ctx.validate_inputs(STAGE_ID, INPUTS)
-    result: Any = human_stage.run(ctx, item=ctx.item if MODE == 'per_item' else None)
+    impl.run_whole(ctx)
     ctx.validate_outputs(STAGE_ID, OUTPUTS)
-    return StageResult.from_human_result(stage_id=STAGE_ID, value=result)
