@@ -1,1 +1,31 @@
-# Phase 1 pipeline definition placeholder
+{
+  "pipeline_id": "phase1-default",
+  "item_unit": "item",
+  "determinism_policy": "strict",
+  "stages": [
+    {
+      "id": "ingest",
+      "mode": "whole_run",
+      "inputs": [],
+      "outputs": ["items.jsonl"]
+    },
+    {
+      "id": "transform",
+      "mode": "per_item",
+      "inputs": ["items.jsonl"],
+      "outputs": ["transformed.jsonl"]
+    },
+    {
+      "id": "validate",
+      "mode": "whole_run",
+      "inputs": ["transformed.jsonl"],
+      "outputs": ["validation_report.json"]
+    },
+    {
+      "id": "publish",
+      "mode": "whole_run",
+      "inputs": ["validation_report.json"],
+      "outputs": ["published_manifest.json"]
+    }
+  ]
+}
