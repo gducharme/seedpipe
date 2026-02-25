@@ -222,11 +222,43 @@ def resolve_artifact_schemas(ir: PipelineIR, contracts: dict[str, dict[str, Any]
     return mapping
 
 
+
 def ensure_package_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     init = path / "__init__.py"
     if not init.exists():
         init.write_text("\n")
+
+
+def _stage_impl_stub(stage: StageIR) -> str:
+    if stage.mode == "whole_run":
+        return (
+            "from __future__ import annotations\n\n"
+            "\n"
+            "def run_whole(ctx) -> None:\n"
+            "    _ = ctx\n"
+        )
+    return (
+        "from __future__ import annotations\n\n"
+        "from typing import Any\n\n"
+        "\n"
+        "def run_item(ctx, item: dict[str, Any]) -> None:\n"
+        "    _ = (ctx, item)\n"
+    )
+
+
+def ensure_src_stage_impls(project_dir: Path, ir: PipelineIR) -> None:
+    src_dir = project_dir / "src"
+    stages_dir = src_dir / "stages"
+    ensure_package_dir(src_dir)
+    ensure_package_dir(stages_dir)
+
+    for stage in ir.stages:
+        if stage.placeholder:
+            continue
+        stage_impl_path = stages_dir / f"{stage.stage_id}.py"
+        if not stage_impl_path.exists():
+            stage_impl_path.write_text(_stage_impl_stub(stage))
 
 
 def generated_banner(meta: dict[str, str]) -> str:
@@ -436,6 +468,7 @@ def compile_pipeline(paths: CompilePaths, *, emit_debug_ir: bool = True) -> dict
     paths.output_dir.mkdir(parents=True, exist_ok=True)
     ensure_package_dir(paths.output_dir)
     ensure_package_dir(paths.output_dir / "stages")
+    ensure_src_stage_impls(paths.pipeline_path.parent, ir)
 
     contract_paths = sorted(paths.contracts_dir.glob("*.schema.json"))
     meta = {

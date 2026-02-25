@@ -138,6 +138,28 @@ TEMPLATES = {
     Path("spec/phase1/contracts/manifest.schema.json"): MANIFEST_SCHEMA_TEMPLATE,
     Path("artifacts/inputs/.gitkeep"): "",
     Path("artifacts/outputs/.gitkeep"): "",
+    Path("src/__init__.py"): "",
+    Path("src/stages/__init__.py"): "",
+    Path("src/stages/ingest.py"): """from __future__ import annotations
+
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    Path("artifacts/items.jsonl").write_text("")
+""",
+    Path("src/stages/transform.py"): """from __future__ import annotations
+
+
+def run_item(ctx, item: dict[str, object]) -> None:
+    _ = (ctx, item)
+""",
+    Path("src/stages/publish.py"): """from __future__ import annotations
+
+
+def run_whole(ctx) -> None:
+    _ = ctx
+""",
 }
 
 
