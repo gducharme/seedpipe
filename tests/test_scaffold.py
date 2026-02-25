@@ -19,7 +19,9 @@ class ScaffoldTests(unittest.TestCase):
             self.assertTrue((root / "spec/phase1/contracts/manifest.schema.json").exists())
             self.assertTrue((root / "agents-readme.markdown").exists())
             self.assertTrue((root / "artifacts/inputs/.gitkeep").exists())
-            self.assertTrue((root / "artifacts/outputs/.gitkeep").exists())
+            outputs_gitignore = root / "artifacts/outputs/.gitignore"
+            self.assertTrue(outputs_gitignore.exists())
+            self.assertEqual(outputs_gitignore.read_text(), "*\n!.gitignore\n")
             self.assertTrue((root / "src" / "stages" / "ingest.py").exists())
             self.assertTrue((root / "src" / "stages" / "transform.py").exists())
             self.assertTrue((root / "src" / "stages" / "publish.py").exists())
