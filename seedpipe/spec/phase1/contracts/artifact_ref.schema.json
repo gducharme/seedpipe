@@ -14,7 +14,7 @@
     "path": {
       "type": "string",
       "minLength": 1,
-      "description": "Repository/workspace-relative path to the artifact file."
+      "description": "Path to the artifact file, relative to the current working directory unless absolute."
     },
     "hash": {
       "type": "string",

@@ -15,6 +15,7 @@ dependencies = [
 [project.scripts]
 seedpipe-compile = "tools.compile:main"
 seedpipe-scaffold = "tools.scaffold:main"
+seedpipe-run = "tools.run:main"
 
 [tool.setuptools]
 include-package-data = true
