@@ -15,6 +15,11 @@
 4. Re-compile (`seedpipe-compile`) to refresh `generated/`.
 5. Execute (`seedpipe-run --run-id <id>`) and verify outputs.
 
+## Artifact directory expectations
+
+- `artifacts/inputs/` should contain the input artifacts needed to begin a run.
+- `artifacts/outputs/<run_id>/` should contain stage artifacts generated for that specific run ID, with each run isolated in its own directory.
+
 
 ## Command availability note
 
