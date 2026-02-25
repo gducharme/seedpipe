@@ -89,7 +89,9 @@ class Verifier:
         for ref in self._iter_artifacts(manifest):
             name = ref.get("name", "")
             stage_id = ref.get("_stage_id", ref.get("produced_by", {}).get("stage_id", "global"))
-            artifact_path = manifest_path.parent / ref.get("path", "")
+            artifact_path = Path(ref.get("path", ""))
+            if not artifact_path.is_absolute():
+                artifact_path = Path.cwd() / artifact_path
             location = {"run_id": manifest.get("run_id", ""), "stage_id": stage_id, "artifact_name": name, "path": str(artifact_path)}
             if not artifact_path.exists():
                 self.emit_defect(

@@ -22,12 +22,14 @@ python -m pip install -e /path/to/seedpipe
 - `tools` package (including `tools.compile` and `tools.scaffold`).
 - `seedpipe-compile` CLI entrypoint.
 - `seedpipe-scaffold` CLI entrypoint.
+- `seedpipe-run` CLI entrypoint.
 
 After install, you can run:
 
 ```bash
 seedpipe-compile --help
 seedpipe-scaffold --help
+seedpipe-run --help
 ```
 
 Or import in Python:
@@ -49,6 +51,8 @@ This creates:
 
 - `spec/phase1/pipeline.yaml`
 - `spec/phase1/contracts/*.schema.json`
+- `artifacts/inputs/.gitkeep`
+- `artifacts/outputs/.gitkeep`
 
 To scaffold somewhere else:
 
@@ -113,6 +117,25 @@ You can also use the installed entrypoint:
 ```bash
 seedpipe-compile
 ```
+
+## Run a compiled pipeline
+
+After compiling, execute the generated flow with:
+
+```bash
+seedpipe-run --run-id my-run-001
+```
+
+By default this loads `generated/flow.py`, creates a run directory at
+`./artifacts/outputs/<run-id>`, and executes the flow from inside that run directory.
+
+Use:
+- `--generated-dir` when compiled flow code lives somewhere other than `./generated`.
+- `--inputs-dir` to set the consumable input root (default: `./artifacts/inputs`).
+- `--output-dir` to override the run output directory.
+- `--attempt` to set a non-default retry attempt number.
+
+`seedpipe-run` will error if the run output directory already exists (including the default `./artifacts/outputs/<run-id>` path), and will error if the inputs directory does not exist.
 
 ## Use the compiler from Python
 

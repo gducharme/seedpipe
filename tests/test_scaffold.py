@@ -16,7 +16,9 @@ class ScaffoldTests(unittest.TestCase):
 
             self.assertTrue((root / "spec/phase1/pipeline.yaml").exists())
             self.assertTrue((root / "spec/phase1/contracts/manifest.schema.json").exists())
-            self.assertGreaterEqual(len(created), 5)
+            self.assertTrue((root / "artifacts/inputs/.gitkeep").exists())
+            self.assertTrue((root / "artifacts/outputs/.gitkeep").exists())
+            self.assertGreaterEqual(len(created), 7)
 
             result = compile_pipeline(
                 CompilePaths(
