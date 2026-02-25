@@ -89,10 +89,10 @@ def _mount_inputs(run_output_dir: Path, inputs_dir: Path) -> None:
 def run_generated_flow(
     generated_dir: Path,
     run_id: str | None = None,
-    attempt: int = 1,
     output_dir: Path | None = None,
     inputs_dir: Path = DEFAULT_INPUTS_DIR,
     run_config: dict[str, object] | None = None,
+    fail_on_existing_run: bool = False,
 ) -> int:
     flow_path = generated_dir / "flow.py"
     if not flow_path.exists():
@@ -111,9 +111,16 @@ def run_generated_flow(
         raise ValueError('run_config must include a non-empty string run_id')
     run_output_dir = output_dir if output_dir is not None else _default_run_output_dir(effective_run_id)
     if run_output_dir.exists():
-        raise FileExistsError(f"refusing to overwrite existing run directory: {run_output_dir}")
-    run_output_dir.mkdir(parents=True, exist_ok=False)
-    _mount_inputs(run_output_dir, inputs_dir)
+        if fail_on_existing_run:
+            raise FileExistsError(f"refusing to overwrite existing run directory: {run_output_dir}")
+    else:
+        run_output_dir.mkdir(parents=True, exist_ok=False)
+
+    (run_output_dir / "defects").mkdir(parents=True, exist_ok=True)
+
+    mounted_inputs_dir = run_output_dir / "artifacts" / "inputs"
+    if not mounted_inputs_dir.exists():
+        _mount_inputs(run_output_dir, inputs_dir)
 
     _purge_generated_modules()
     _mount_generated_package(generated_dir)
@@ -121,13 +128,12 @@ def run_generated_flow(
 
     flow = importlib.import_module("seedpipe.generated.flow")
     with _pushd(run_output_dir):
-        return int(flow.run(run_config=effective_run_config, attempt=attempt))
+        return int(flow.run(run_config=effective_run_config))
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run generated Seedpipe flow")
     parser.add_argument("--run-id", required=True, help="Unique run identifier")
-    parser.add_argument("--attempt", type=int, default=1, help="Attempt number (default: 1)")
     parser.add_argument(
         "--generated-dir",
         type=Path,
@@ -146,6 +152,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Run output directory (default: ./artifacts/outputs/<run-id>)",
     )
+    parser.add_argument(
+        "--fail-on-existing-run",
+        action="store_true",
+        help="Fail instead of resuming when the run output directory already exists",
+    )
     return parser.parse_args()
 
 
@@ -154,9 +165,9 @@ def main() -> None:
     code = run_generated_flow(
         generated_dir=args.generated_dir,
         run_id=args.run_id,
-        attempt=args.attempt,
         output_dir=args.output_dir,
         inputs_dir=args.inputs_dir,
+        fail_on_existing_run=args.fail_on_existing_run,
     )
     raise SystemExit(code)
 

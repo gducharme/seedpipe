@@ -1,93 +1,109 @@
-# Phase 1 Invariants (Pipeline-Generic)
+# Seedpipe Failure + Resume Invariants (Rework)
 
-These invariants define the **universal correctness rules** for Seedpipe Phase 1.
-They are the non-negotiables that every agent, stage, and tool must preserve.
+These invariants define the correctness contract for failure handling, resume behavior, and selective rework in Seedpipe.
 
----
+## I. Artifact truth & run directory invariants
 
-## Determinism & Reproducibility
+1. **Single run root**  
+   Every run executes inside exactly one run directory: `./artifacts/outputs/<run-id>/` by default.
 
-1. **Deterministic builds**  
-   Same `(inputs, manifest/config, code_version)` ⇒ same **artifact hashes**.
+2. **Artifact truth is authoritative**  
+   Completion and resume status MUST be inferred from on-disk artifacts + validation, not in-memory flags.
 
-2. **Explicit precedence is deterministic**  
-   Configuration resolution order is fixed and testable (e.g., `CLI override > manifest > defaults`), and invalid overrides fail closed (e.g., empty/whitespace override is an error).
+3. **No implicit mutation of prior runs**  
+   A run MUST NOT mutate artifacts of any other `run_id`.
 
-3. **Stable identifiers**  
-   `item_id`, `stage_id`, `run_id`, and schema versions are stable and never repurposed.
+4. **Deterministic re-run is allowed**  
+   Re-running the same `run_id` is supported and MUST converge to the same final outputs when inputs/config are unchanged and determinism policy is strict.
 
-4. **No hidden ambient inputs**  
-   Outputs must not depend on machine-local state (cwd, locale, timezone, hostnames), nondeterministic iteration order, or unpinned external resources—unless explicitly declared as an input.
+## II. Stage boundary & completion invariants
 
----
+5. **Stage input closure**  
+   A stage MUST NOT start unless declared inputs exist and pass required validation.
 
-## Immutability & Content Addressing
+6. **Stage output closure**  
+   A stage MUST NOT be marked completed unless declared outputs exist and validate.
 
-5. **Write-once stage outputs**  
-   Stage outputs are immutable: once published, they are never modified in-place.
+7. **Completion is skip-safe**  
+   If a stage is considered completed, skipping it MUST preserve downstream semantics.
 
-6. **Content-addressed artifacts**  
-   Every artifact has a verifiable integrity identity (hash/etag) and may be safely cached/deduped.
+8. **No half-commit completion**  
+   Downstream MUST NOT observe a stage as completed while outputs are partial/invalid.
 
-7. **Append-only state logs**  
-   Mutable “state” is expressed as append-only events (or versioned snapshots), never silent mutation of historical records.
+9. **Whole-run atomicity by directory**  
+   `whole_run` stages SHOULD write through temp locations and atomically commit into place (or equivalent).
 
----
+## III. Failure semantics invariants
 
-## Resume Safety & Idempotency
+10. **Failure is explicit and inspectable**  
+    Any stage failure MUST emit a structured defect record under the run directory (for example `defects/...`) with stage id, mode, attempt, error details, and evidence pointers.
 
-8. **Resume is safe**  
-   A restart cannot corrupt prior valid artifacts; at worst, it recomputes or advances safely.
+11. **Failure never silently advances**  
+    On failure, downstream stages MUST NOT execute in that run.
 
-9. **Idempotent stage execution**  
-   Each stage is idempotent under a stable key, e.g.  
-   `(run_id, stage_id, item_id, attempt)` ⇒ either (a) reuses prior result or (b) produces an equivalent result without duplication/corruption.
+12. **Failed state is retryable without manual surgery**  
+    Re-running the same `run_id` MUST continue from the earliest incomplete stage unless user overrides behavior.
 
-10. **Crash consistency**  
-   Partial writes cannot masquerade as completed work. Completion must be atomic (e.g., temp + rename, commit marker).
+## IV. Per-item semantics invariants (`per_item`)
 
-11. **Exactly-one “commit point” per stage/item**  
-   For a given stage+item execution, there is a single authoritative commit marker; multiple conflicting commits are invalid and must be detected.
+13. **Stable item identity**  
+    Each processed unit MUST have a stable `item_id`; if stable identity cannot be derived, `per_item` mode MUST fail clearly.
 
----
+14. **Append-only item state log**  
+    Item outcomes MUST be recorded as append-only records inside the run directory.
 
-## State Machines & Valid Transitions
+15. **Monotone item-state progression**  
+    For `(stage_id, item_id)`, effective state is the last valid record; attempts are ordered and attributable.
 
-12. **State transitions are validated**  
-   Item state changes must be valid per an explicit state machine (no illegal jumps, no implicit transitions).
+16. **Per-item output isolation**  
+    One item’s outputs MUST NOT corrupt or overwrite another’s.
 
-13. **No out-of-order mutation**  
-   A stage may only mutate state after required prerequisites are proven satisfied (e.g., “candidate set validated” before “review_in_progress”).
+17. **Skip semantics for completed items**  
+    On rerun, completed items MUST be skipped unless explicit recompute is requested.
 
-14. **Canonical sources of truth are explicit**  
-   For each decision domain (e.g., “which items are reviewable”), there is exactly one declared canonical artifact, and all downstream stages derive from it.
+18. **Retry semantics for failed items**  
+    On rerun, failed items MAY be retried and retries MUST be distinguishable by attempt metadata.
 
----
+## V. Idempotency & safety invariants
 
-## Contracts, Schemas, and Validation
+19. **Stage wrapper idempotency**  
+    Generated wrappers MUST be safe to re-enter after crashes/restarts without silent corruption.
 
-15. **Every artifact validates against a contract schema**  
-   Each artifact has a declared schema/version; producers must emit valid artifacts; consumers must validate before use.
+20. **No destructive cleanup on startup**  
+    Resume logic MUST NOT auto-delete artifacts beyond scoped temp/lock paths.
 
-16. **Schema evolution is versioned and compatible by policy**  
-   Breaking changes require a version bump and explicit migration strategy (no silent shape drift).
+21. **Locks do not define truth**  
+    Locks MAY gate concurrency but MUST NOT be the sole source of completion/progress truth.
 
-17. **Error handling is contract-preserving**  
-   Failures must not produce “valid-looking” but semantically broken artifacts; invalid outputs must be unambiguously invalid.
+## VI. Determinism invariants (strict)
 
----
+22. **Strict determinism means reproducible outputs**  
+    Identical inputs/config under strict policy MUST produce identical output hashes (modulo declared exclusions).
 
-## Isolation, Concurrency, and Locking
+23. **Resume determinism**  
+    A resumed run MUST match a clean run result under strict policy.
 
-18. **Isolation of runs**  
-   Two runs cannot overwrite each other’s artifacts. Shared caches are read-only or content-addressed and safe under concurrency.
+24. **Ordering determinism**  
+    `per_item` iteration order MUST be deterministic or explicitly defined.
 
-19. **Locks are advisory + verifiable**  
-   If locks exist, they must be (a) attributable (include run_id/owner), (b) refreshable/heartbeated if needed, and (c) safely reclaimable via a stale policy—without risking double-commit.
+## VII. Validation & contracts invariants
 
----
+25. **Contracts are enforced at boundaries**  
+    Contract validation MUST occur post-production and pre-consumption as required.
 
-## Observability & Auditability
+26. **Manifest integrity**  
+    Any manifest MUST reference only artifacts that exist and validate.
 
-20. **Every execution is auditable**  
-   For each stage+item, the system records: inputs’ hashes, config hash, code_version, start/end timestamps (always in UTC), status, and produced artifact hashes—sufficient to reproduce and debug. Any time-step markers, if present, are also recorded in UTC.
+27. **`generated/` is compiler-owned**  
+    Runtime MUST treat generated code as immutable for a run.
+
+## VIII. UX invariants (simplicity constraints)
+
+28. **Default command is resumable**  
+    `seedpipe-run --run-id X` MUST start a new run or resume an existing run directory by default.
+
+29. **No recovery DSL required in phase 1**  
+    Recovery MUST NOT require users to author retry policy graphs/languages.
+
+30. **Selective rework stays file-centric**  
+    Supported manual escape hatch: remove specific outputs or item-state records, rerun, and rely on deterministic regeneration.
