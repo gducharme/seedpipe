@@ -2,19 +2,21 @@
   "artifact_schema_map": {
     "items.jsonl": "items_row.schema.json",
     "published_manifest.json": "manifest.schema.json",
+    "reviewed_report.json": "artifact_ref.schema.json",
     "transformed.jsonl": "artifact_ref.schema.json",
     "validation_report.json": "artifact_ref.schema.json"
   },
   "compiler_version": "phase1-mvp",
   "emitted_files": {
-    "generated/flow.py": "sha256:d4bc8ac524cf549c638d84c531574d49080d9daa203a074c969cf0610f36d58a",
-    "generated/ir.json": "sha256:c63cbf5ffb2622ac50fa1f3294da4a855935156b6237c6971d6a9c0dc4b0da7f",
-    "generated/models.py": "sha256:eeb26bacfabd9ca12096eab4dfe91a22c136ab670a38c4474ddf1c6230305e0b",
-    "generated/stages/__init__.py": "sha256:6948d1c75ce6374b8e463ce1fe2e3c2872e5a40d771fa284644b8787c3fb9604",
-    "generated/stages/ingest.py": "sha256:03d04d538a97eecb0deb4ebbf581c877ed90485e4845e871e7a8009bafd8f690",
-    "generated/stages/publish.py": "sha256:1eefeacc795cd3e6100168dcdda556be639e5601bcf0b7d186a7b1a032d8ca1a",
-    "generated/stages/transform.py": "sha256:ba385b8fb12c24a168dbf2ee87504d620704a6ea4a9f542713f0a192a663b827",
-    "generated/stages/validate.py": "sha256:d059a4f82d4208e1561c6fd4f375f94a74cff57c95c33981dccb594cad5e83e1"
+    "generated/flow.py": "sha256:dd7bc07209fa379539bb220443dcb6e28f849fc39f82b24917eafc204e7b65b8",
+    "generated/ir.json": "sha256:c54c36927a3e02d37f25e9229af83404a4aa97a4e97bb2ce8b0b2e55e5848624",
+    "generated/models.py": "sha256:35e6d925957109e89d05c8e838ef947884de3b8b3d4f4bb3c5a29d14607e2cb0",
+    "generated/stages/__init__.py": "sha256:c5d883eb1537d2597fad79d46f4b720ba59ff6a43a9e15db868870f7db2579f7",
+    "generated/stages/future_review.py": "sha256:97f1fbd178f03f76dae5b0533ef0f35ac63dd7e0f7523f1b7b40ce7dcb2dd4ed",
+    "generated/stages/ingest.py": "sha256:4ddd1b39098abc77d02c25ba432bb6baaccca49124eec50886fb7bdb31a530c3",
+    "generated/stages/publish.py": "sha256:f55409faa063f44414484407d7ccf60d58ddadccdeebaf5a381e99a769e05746",
+    "generated/stages/transform.py": "sha256:6e0a55e9459b58b5207ffdac633711ad7b629219ed1feb1bfc9acbe0315084c6",
+    "generated/stages/validate.py": "sha256:3f30d8ac11c3de89396979aaa4e8c02a1c49168406c75b7c8971b76e2c4dc2e7"
   },
   "pipeline_id": "phase1-default",
   "warnings": []
