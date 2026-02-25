@@ -239,6 +239,7 @@ def generated_banner(meta: dict[str, str]) -> str:
 
 
 def emit_models_py(contracts: dict[str, dict[str, Any]], meta: dict[str, str]) -> str:
+    contracts_json = stable_json(contracts)
     return (
         generated_banner(meta)
         + "from __future__ import annotations\n\n"
@@ -264,7 +265,7 @@ def emit_models_py(contracts: dict[str, dict[str, Any]], meta: dict[str, str]) -
         + "    item_id: str\n"
         + "    ok: bool\n"
         + "    error: dict[str, Any] | None = None\n\n"
-        + f"CONTRACTS: dict[str, dict[str, Any]] = {stable_json(contracts)}\n"
+        + f"CONTRACTS: dict[str, dict[str, Any]] = json.loads({contracts_json!r})\n"
         + "\n"
         + "def get_schema(name: str) -> dict[str, Any]:\n"
         + "    if name not in CONTRACTS:\n"
