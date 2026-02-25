@@ -34,13 +34,13 @@ def run(run_config: dict[str, object], attempt: int = 1) -> int:
             code = run_generated_flow(
                 generated_dir=generated_dir,
                 run_id="demo-run",
-                attempt=2,
                 output_dir=output_dir,
                 inputs_dir=inputs_dir,
             )
 
             self.assertEqual(code, 0)
-            self.assertEqual((output_dir / "marker.txt").read_text(), "demo-run:2")
+            self.assertEqual((output_dir / "marker.txt").read_text(), "demo-run:1")
+            self.assertTrue((output_dir / "defects").is_dir())
 
     def test_run_generated_flow_passes_flexible_run_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -63,14 +63,13 @@ def run(run_config: dict[str, object], attempt: int = 1) -> int:
             output_dir = root / "artifacts" / "outputs" / "configured-run"
             code = run_generated_flow(
                 generated_dir=generated_dir,
-                attempt=4,
                 output_dir=output_dir,
                 inputs_dir=inputs_dir,
                 run_config={"run_id": "configured-run", "trace_id": "t-1"},
             )
 
             self.assertEqual(code, 0)
-            self.assertEqual((output_dir / "config.txt").read_text(), "configured-run:t-1:4")
+            self.assertEqual((output_dir / "config.txt").read_text(), "configured-run:t-1:1")
 
     def test_run_generated_flow_uses_default_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -99,7 +98,37 @@ def run(run_config: dict[str, object], attempt: int = 1) -> int:
             self.assertEqual(code, 0)
             self.assertEqual((root / "artifacts" / "outputs" / "default-run" / "ran.txt").read_text(), "default-run")
 
-    def test_run_generated_flow_errors_if_run_id_dir_exists(self) -> None:
+    def test_run_generated_flow_resumes_if_run_id_dir_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            generated_dir.mkdir()
+            inputs_dir = root / "artifacts" / "inputs"
+            inputs_dir.mkdir(parents=True)
+            (inputs_dir / "items.jsonl").write_text('{"item_id":"i-1"}\n')
+            (generated_dir / "flow.py").write_text(
+                """
+from pathlib import Path
+
+
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
+    Path('resume.txt').write_text(f"{run_config['run_id']}:{attempt}")
+    return 0
+""".strip()
+            )
+            output_dir = root / "artifacts" / "outputs" / "existing-run"
+            output_dir.mkdir(parents=True)
+            mounted_inputs = output_dir / "artifacts" / "inputs"
+            mounted_inputs.parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(inputs_dir.resolve(), mounted_inputs, target_is_directory=True)
+
+            code = run_generated_flow(generated_dir=generated_dir, run_id="existing-run", output_dir=output_dir, inputs_dir=inputs_dir)
+
+            self.assertEqual(code, 0)
+            self.assertEqual((output_dir / "resume.txt").read_text(), "existing-run:1")
+            self.assertTrue((output_dir / "defects").is_dir())
+
+    def test_run_generated_flow_fail_on_existing_run_when_requested(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             generated_dir = root / "generated"
@@ -111,7 +140,13 @@ def run(run_config: dict[str, object], attempt: int = 1) -> int:
             output_dir.mkdir(parents=True)
 
             with self.assertRaises(FileExistsError):
-                run_generated_flow(generated_dir=generated_dir, run_id="existing-run", output_dir=output_dir, inputs_dir=inputs_dir)
+                run_generated_flow(
+                    generated_dir=generated_dir,
+                    run_id="existing-run",
+                    output_dir=output_dir,
+                    inputs_dir=inputs_dir,
+                    fail_on_existing_run=True,
+                )
 
     def test_run_generated_flow_requires_compiled_flow_module(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,7 +216,6 @@ def run_whole(ctx: StageContext) -> None:
             code = run_generated_flow(
                 generated_dir=generated_dir,
                 run_id="demo-run",
-                attempt=2,
                 output_dir=output_dir,
                 inputs_dir=inputs_dir,
             )

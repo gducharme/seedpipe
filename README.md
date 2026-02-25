@@ -223,9 +223,9 @@ Use:
 - `--generated-dir` when compiled flow code lives somewhere other than `./generated`.
 - `--inputs-dir` to set the consumable input root (default: `./artifacts/inputs`).
 - `--output-dir` to override the run output directory.
-- `--attempt` to set a non-default retry attempt number.
+- `--fail-on-existing-run` to fail fast instead of resuming when the run directory already exists.
 
-`seedpipe-run` will error if the run output directory already exists (including the default `./artifacts/outputs/<run-id>` path), and will error if the inputs directory does not exist.
+`seedpipe-run` resumes by default when the run output directory already exists (including the default `./artifacts/outputs/<run-id>` path), and errors only when `--fail-on-existing-run` is set. It will still error if the inputs directory does not exist.
 
 ## Use the compiler from Python
 
