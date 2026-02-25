@@ -100,6 +100,83 @@ stages:
       - manifest.json
 ```
 
+## `pipeline.yaml` reference and design guidance
+
+`spec/phase1/pipeline.yaml` is the pipeline contract used by the compiler. It can be written as YAML (recommended for readability) or JSON (valid YAML). The compiler loads this file, normalizes defaults, validates structure, and emits runnable code under `generated/`.
+
+### Top-level fields
+
+- `pipeline_id` *(string, required)*
+  - Unique identifier for the pipeline.
+  - Used in generated metadata and compile reports.
+
+- `item_unit` *(string, optional, default: `item`)*
+  - Human/semantic label for the per-item unit being processed.
+  - Example values: `item`, `record`, `paragraph`, `doc`.
+
+- `determinism_policy` *(enum, optional, default: `strict`)*
+  - Allowed values: `strict`, `best_effort`.
+  - Current compiler/runtime validates and propagates this value into generated flow metadata.
+  - Practical recommendation: use `strict` unless you have a clear reason to track weaker determinism guarantees.
+
+- `stages` *(array, required, at least one stage)*
+  - Ordered list of stages to execute.
+  - Order is meaningful: stages can only consume artifacts produced by earlier stages.
+
+### Stage fields
+
+Each stage entry supports:
+
+- `id` *(string, required)*
+  - Unique stage identifier.
+  - Used for generated module names and item-state provenance.
+
+- `mode` *(enum, optional, default: `whole_run`)*
+  - `whole_run`: runs once via `run_whole(ctx)`.
+  - `per_item`: iterates items from `items.jsonl`, runs `run_item(ctx, item)` for each item, and appends item-state transitions.
+
+- `inputs` *(array of strings, optional, default: `[]`)*
+  - Declares artifacts required before stage execution.
+  - Compiler enforces that each input is produced by a previous stage.
+  - Runtime wrapper validates all listed inputs exist.
+
+- `outputs` *(array of strings, optional, default: `[]`)*
+  - Declares artifacts that must exist after the stage finishes.
+  - Runtime wrapper validates all declared outputs exist.
+  - If your stage doesn’t write one of these files, the run fails.
+
+- `placeholder` *(boolean, optional, default: `false`)*
+  - Marks a stage as planned/no-op implementation.
+  - Compiler skips importing user stage code for placeholder stages.
+  - Input/output validation still applies, so placeholders should be used carefully.
+
+### Artifact wiring rules (important)
+
+1. **No forward references in `inputs`**: a stage cannot consume an artifact that has not already been declared as an output of an earlier stage.
+2. **Declare what you actually produce**: declared outputs are enforced at runtime.
+3. **Use stable artifact names**: downstream stage contracts depend on exact names.
+
+### How this affects compile and run flows
+
+- During **compile** (`seedpipe-compile`), the spec is:
+  - loaded and normalized with defaults,
+  - validated for required fields and ordering rules,
+  - transformed into generated wrappers/flow/models.
+
+- During **run** (`seedpipe-run`), generated wrappers:
+  - validate stage inputs before execution,
+  - call your stage implementation (`src/stages/*.py`) unless placeholder,
+  - validate stage outputs after execution.
+
+### Best practices when creating/generating pipelines
+
+- Start simple: `ingest` → one or more transforms → validation/publish.
+- Use `per_item` only when input rows have stable `item_id` values.
+- Keep `stages` linear and explicit; avoid overloading one stage with too many responsibilities.
+- Keep contracts in `spec/phase1/contracts` aligned with emitted artifact formats.
+- Re-run the compiler after any `pipeline.yaml` change.
+- Do not hand-edit `generated/`; it is compiler-owned output.
+
 ## Compile a pipeline specification
 
 Run the compiler against a pipeline file and contracts directory:
