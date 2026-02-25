@@ -31,6 +31,7 @@ class StageIR:
     mode: Literal["whole_run", "per_item"]
     inputs: tuple[str, ...]
     outputs: tuple[str, ...]
+    placeholder: bool
 
 
 @dataclasses.dataclass(frozen=True)
@@ -100,6 +101,7 @@ def normalize_pipeline(raw: dict[str, Any]) -> dict[str, Any]:
         s.setdefault("inputs", [])
         s.setdefault("outputs", [])
         s.setdefault("mode", "whole_run")
+        s.setdefault("placeholder", False)
         normalized_stages.append(s)
     normalized["stages"] = normalized_stages
     return normalized
@@ -131,6 +133,10 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
         if mode not in {"whole_run", "per_item"}:
             raise CompileError(f"pipeline.stages[{idx}].mode must be 'whole_run' or 'per_item'")
 
+        placeholder = stage.get("placeholder")
+        if not isinstance(placeholder, bool):
+            raise CompileError(f"pipeline.stages[{idx}].placeholder must be a boolean")
+
         for field in ("inputs", "outputs"):
             if not isinstance(stage.get(field), list):
                 raise CompileError(f"pipeline.stages[{idx}].{field} must be an array")
@@ -161,6 +167,7 @@ def build_ir(pipeline: dict[str, Any]) -> PipelineIR:
             mode=stage["mode"],
             inputs=tuple(stage["inputs"]),
             outputs=tuple(stage["outputs"]),
+            placeholder=bool(stage.get("placeholder", False)),
         )
         stages.append(stage_ir)
         for artifact_name in stage_ir.outputs:
@@ -278,6 +285,8 @@ def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
     wrapper_name = mode_fn
     mode_signature = "ctx: StageContext" if stage.mode == "whole_run" else "ctx: StageContext, item: dict[str, Any]"
     mode_call = "impl.run_whole(ctx)" if stage.mode == "whole_run" else "impl.run_item(ctx, item)"
+    if stage.placeholder:
+        mode_call = "None"
     item_result_return = (
         "    item_id = item.get('item_id', '')\n"
         "    try:\n"
@@ -301,7 +310,11 @@ def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
         + "from typing import Any\n\n"
         + "from seedpipe.runtime.ctx import StageContext\n"
         + "from seedpipe.generated.models import ItemResult\n"
-        + f"from seedpipe.src.stages import {stage.stage_id} as impl\n\n"
+        + (
+            f"from seedpipe.src.stages import {stage.stage_id} as impl\n\n"
+            if not stage.placeholder
+            else "\n"
+        )
         + f"STAGE_ID = {stage.stage_id!r}\n"
         + f"MODE = {stage.mode!r}\n"
         + f"INPUTS = {python_string_list(stage.inputs)}\n"

@@ -22,9 +22,16 @@
       "outputs": ["validation_report.json"]
     },
     {
+      "id": "future_review",
+      "mode": "whole_run",
+      "placeholder": true,
+      "inputs": ["validation_report.json"],
+      "outputs": ["reviewed_report.json"]
+    },
+    {
       "id": "publish",
       "mode": "whole_run",
-      "inputs": ["validation_report.json"],
+      "inputs": ["reviewed_report.json"],
       "outputs": ["published_manifest.json"]
     }
   ]
