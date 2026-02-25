@@ -19,4 +19,4 @@
 ## Command availability note
 
 - `seedpipe-scaffold`, `seedpipe-compile`, and `seedpipe-run` are available after installing this repository into an environment.
-- If those entrypoints are unavailable (for example, when working from a raw checkout), use `python -m tools.scaffold`, `python -m tools.compile`, and `python -m tools.run` instead.
+- If those entrypoints are unavailable, it is possible the seedpipe project is still in stealth. Then you should infer what would happen.
