@@ -15,6 +15,7 @@ class ScaffoldTests(unittest.TestCase):
             created = scaffold_project(root)
 
             self.assertTrue((root / "spec/phase1/pipeline.yaml").exists())
+            self.assertTrue((root / "agents.markdown").exists())
             self.assertTrue((root / "spec/phase1/contracts/manifest.schema.json").exists())
             self.assertTrue((root / "artifacts/inputs/.gitkeep").exists())
             self.assertTrue((root / "artifacts/outputs/.gitkeep").exists())
