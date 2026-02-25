@@ -2,6 +2,7 @@
   "artifact_producers": {
     "items.jsonl": "ingest",
     "published_manifest.json": "publish",
+    "reviewed_report.json": "future_review",
     "transformed.jsonl": "transform",
     "validation_report.json": "validate"
   },
@@ -15,6 +16,7 @@
       "outputs": [
         "items.jsonl"
       ],
+      "placeholder": false,
       "stage_id": "ingest"
     },
     {
@@ -25,6 +27,7 @@
       "outputs": [
         "transformed.jsonl"
       ],
+      "placeholder": false,
       "stage_id": "transform"
     },
     {
@@ -35,6 +38,7 @@
       "outputs": [
         "validation_report.json"
       ],
+      "placeholder": false,
       "stage_id": "validate"
     },
     {
@@ -43,8 +47,20 @@
       ],
       "mode": "whole_run",
       "outputs": [
+        "reviewed_report.json"
+      ],
+      "placeholder": true,
+      "stage_id": "future_review"
+    },
+    {
+      "inputs": [
+        "reviewed_report.json"
+      ],
+      "mode": "whole_run",
+      "outputs": [
         "published_manifest.json"
       ],
+      "placeholder": false,
       "stage_id": "publish"
     }
   ]

@@ -103,6 +103,14 @@ If your repository uses the default layout (`spec/phase1/pipeline.yaml`,
 `spec/phase1/contracts`, `generated`), run:
 
 ```bash
+python -m tools.compile
+```
+
+This command compiles the pipeline using defaults and refreshes everything under `generated/`.
+
+You can also use the installed entrypoint:
+
+```bash
 seedpipe-compile
 ```
 
