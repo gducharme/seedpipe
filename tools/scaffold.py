@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from importlib import metadata
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -138,6 +139,14 @@ def _load_agents_readme_template() -> str:
     readme_path = REPO_ROOT / "README.md"
     if readme_path.exists():
         return readme_path.read_text()
+    try:
+        package_metadata = metadata.metadata("seedpipe")
+    except metadata.PackageNotFoundError:
+        package_metadata = None
+    if package_metadata is not None:
+        description = package_metadata.get_payload().strip()
+        if description:
+            return f"{description}\n"
     return "# Seedpipe\n\nProject README was unavailable at scaffold time.\n"
 
 TEMPLATES = {
@@ -151,7 +160,6 @@ TEMPLATES = {
 - `artifacts/outputs/<run_id>/` should contain stage artifacts for that specific run ID.
 - CLI entrypoints may be unavailable until installation; use `python -m tools.scaffold|compile|run` from a checkout.
 """,
-    Path("agents-readme.markdown"): _load_agents_readme_template(),
     Path("spec/phase1/pipeline.yaml"): PIPELINE_TEMPLATE,
     Path("spec/phase1/contracts/artifact_ref.schema.json"): ARTIFACT_REF_SCHEMA_TEMPLATE,
     Path("spec/phase1/contracts/item_state_row.schema.json"): ITEM_STATE_SCHEMA_TEMPLATE,
@@ -196,8 +204,12 @@ def run_whole(ctx) -> None:
 
 
 def scaffold_project(target_dir: Path, force: bool = False) -> list[Path]:
+    templates = {
+        Path("agents-readme.markdown"): _load_agents_readme_template(),
+        **TEMPLATES,
+    }
     created: list[Path] = []
-    for relative_path, content in TEMPLATES.items():
+    for relative_path, content in templates.items():
         output_path = target_dir / relative_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         if output_path.exists() and not force:
