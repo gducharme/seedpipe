@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 PIPELINE_TEMPLATE = """pipeline_id: example-pipeline
 item_unit: item
 determinism_policy: strict
@@ -130,6 +132,14 @@ MANIFEST_SCHEMA_TEMPLATE = """{
 }
 """
 
+
+
+def _load_agents_readme_template() -> str:
+    readme_path = REPO_ROOT / "README.md"
+    if readme_path.exists():
+        return readme_path.read_text()
+    return "# Seedpipe\n\nProject README was unavailable at scaffold time.\n"
+
 TEMPLATES = {
     Path("agents.markdown"): """# Seedpipe agent guide
 
@@ -137,8 +147,11 @@ TEMPLATES = {
 - Put hand-written stage logic in `src/stages/*.py`.
 - If pipeline structure changes, update `spec/phase1/pipeline.yaml` and re-run `seedpipe-compile`.
 - Keep contract schemas in `spec/phase1/contracts/` in sync with artifact formats.
+- `artifacts/inputs/` should contain the artifacts required to start a run.
+- `artifacts/outputs/<run_id>/` should contain stage artifacts for that specific run ID.
 - CLI entrypoints may be unavailable until installation; use `python -m tools.scaffold|compile|run` from a checkout.
 """,
+    Path("agents-readme.markdown"): _load_agents_readme_template(),
     Path("spec/phase1/pipeline.yaml"): PIPELINE_TEMPLATE,
     Path("spec/phase1/contracts/artifact_ref.schema.json"): ARTIFACT_REF_SCHEMA_TEMPLATE,
     Path("spec/phase1/contracts/item_state_row.schema.json"): ITEM_STATE_SCHEMA_TEMPLATE,

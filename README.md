@@ -57,7 +57,8 @@ seedpipe-scaffold
 
 This creates:
 
-- `agents.markdown` (agent usage guidance, including *never edit `generated/` directly*)
+- `agents.markdown` (agent guidance, including artifact directory expectations and *never edit `generated/` directly*)
+- `agents-readme.markdown` (copy of this repository README for agent context)
 - `spec/phase1/pipeline.yaml`
 - `spec/phase1/contracts/*.schema.json`
 - `artifacts/inputs/.gitkeep`

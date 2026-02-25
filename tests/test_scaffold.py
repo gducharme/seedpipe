@@ -17,12 +17,13 @@ class ScaffoldTests(unittest.TestCase):
             self.assertTrue((root / "spec/phase1/pipeline.yaml").exists())
             self.assertTrue((root / "agents.markdown").exists())
             self.assertTrue((root / "spec/phase1/contracts/manifest.schema.json").exists())
+            self.assertTrue((root / "agents-readme.markdown").exists())
             self.assertTrue((root / "artifacts/inputs/.gitkeep").exists())
             self.assertTrue((root / "artifacts/outputs/.gitkeep").exists())
             self.assertTrue((root / "src" / "stages" / "ingest.py").exists())
             self.assertTrue((root / "src" / "stages" / "transform.py").exists())
             self.assertTrue((root / "src" / "stages" / "publish.py").exists())
-            self.assertGreaterEqual(len(created), 12)
+            self.assertGreaterEqual(len(created), 13)
 
             result = compile_pipeline(
                 CompilePaths(
