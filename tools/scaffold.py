@@ -158,7 +158,7 @@ TEMPLATES = {
     Path("spec/phase1/contracts/items_row.schema.json"): ITEMS_ROW_SCHEMA_TEMPLATE,
     Path("spec/phase1/contracts/manifest.schema.json"): MANIFEST_SCHEMA_TEMPLATE,
     Path("artifacts/inputs/.gitkeep"): "",
-    Path("artifacts/outputs/.gitkeep"): "",
+    Path("artifacts/outputs/.gitignore"): "*\n!.gitignore\n",
     Path("src/__init__.py"): "",
     Path("src/stages/__init__.py"): "",
     Path("src/stages/ingest.py"): """from __future__ import annotations
