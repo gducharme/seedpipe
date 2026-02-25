@@ -32,6 +32,14 @@ seedpipe-scaffold --help
 seedpipe-run --help
 ```
 
+If these entrypoints are unavailable in your environment, run the modules directly from a checkout:
+
+```bash
+python -m tools.compile --help
+python -m tools.scaffold --help
+python -m tools.run --help
+```
+
 Or import in Python:
 
 ```python
@@ -49,10 +57,12 @@ seedpipe-scaffold
 
 This creates:
 
+- `agents.markdown` (agent usage guidance, including *never edit `generated/` directly*)
 - `spec/phase1/pipeline.yaml`
 - `spec/phase1/contracts/*.schema.json`
 - `artifacts/inputs/.gitkeep`
 - `artifacts/outputs/.gitkeep`
+- starter stage implementations in `src/stages/*.py`
 
 To scaffold somewhere else:
 
@@ -111,6 +121,8 @@ python -m tools.compile
 ```
 
 This command compiles the pipeline using defaults and refreshes everything under `generated/`.
+
+> `generated/` is compiler-owned output. Make implementation changes in `src/stages/`, then re-run compilation.
 
 You can also use the installed entrypoint:
 

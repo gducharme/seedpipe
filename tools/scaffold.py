@@ -131,6 +131,14 @@ MANIFEST_SCHEMA_TEMPLATE = """{
 """
 
 TEMPLATES = {
+    Path("agents.markdown"): """# Seedpipe agent guide
+
+- Never edit files under `generated/`; they are compiler output and will be overwritten.
+- Put hand-written stage logic in `src/stages/*.py`.
+- If pipeline structure changes, update `spec/phase1/pipeline.yaml` and re-run `seedpipe-compile`.
+- Keep contract schemas in `spec/phase1/contracts/` in sync with artifact formats.
+- CLI entrypoints may be unavailable until installation; use `python -m tools.scaffold|compile|run` from a checkout.
+""",
     Path("spec/phase1/pipeline.yaml"): PIPELINE_TEMPLATE,
     Path("spec/phase1/contracts/artifact_ref.schema.json"): ARTIFACT_REF_SCHEMA_TEMPLATE,
     Path("spec/phase1/contracts/item_state_row.schema.json"): ITEM_STATE_SCHEMA_TEMPLATE,
@@ -142,17 +150,28 @@ TEMPLATES = {
     Path("src/stages/__init__.py"): "",
     Path("src/stages/ingest.py"): """from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
 def run_whole(ctx) -> None:
-    Path("artifacts/items.jsonl").write_text("")
+    _ = ctx
+    rows = [{"item_id": "item-001"}]
+    payload = "".join(json.dumps(row) + "\\n" for row in rows)
+    Path("artifacts/items.jsonl").write_text(payload)
 """,
     Path("src/stages/transform.py"): """from __future__ import annotations
 
+import json
+from pathlib import Path
+
 
 def run_item(ctx, item: dict[str, object]) -> None:
-    _ = (ctx, item)
+    _ = ctx
+    output = Path("artifacts/transformed.jsonl")
+    transformed = {"item_id": item.get("item_id", ""), "transformed": True}
+    with output.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(transformed) + "\\n")
 """,
     Path("src/stages/publish.py"): """from __future__ import annotations
 
