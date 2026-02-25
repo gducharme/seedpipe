@@ -101,5 +101,66 @@ def run(run_id: str, attempt: int = 1) -> int:
                 run_generated_flow(generated_dir=generated_dir, run_id="missing-inputs", inputs_dir=root / "does-not-exist")
 
 
+    def test_run_generated_flow_mounts_local_src_package_for_stage_impls(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            generated_stages_dir = generated_dir / "stages"
+            generated_stages_dir.mkdir(parents=True)
+            inputs_dir = root / "artifacts" / "inputs"
+            inputs_dir.mkdir(parents=True)
+            (inputs_dir / "items.jsonl").write_text('{"item_id":"i-1"}\n')
+
+            src_stages_dir = root / "src" / "stages"
+            src_stages_dir.mkdir(parents=True)
+            (src_stages_dir / "ingest.py").write_text(
+                """
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    Path('artifacts/items.jsonl').write_text('{\"item_id\": \"i-1\"}\\n')
+""".strip()
+            )
+
+            (generated_dir / "flow.py").write_text(
+                """
+from seedpipe.generated.stages import ingest
+from seedpipe.runtime.ctx import StageContext
+
+
+def run(run_id: str, attempt: int = 1) -> int:
+    ctx = StageContext.make_base(run_id=run_id).for_stage('ingest', attempt=attempt)
+    ingest.run_whole(ctx)
+    return 0
+""".strip()
+            )
+            (generated_stages_dir / "__init__.py").write_text("from . import ingest\n")
+            (generated_stages_dir / "ingest.py").write_text(
+                """
+from seedpipe.runtime.ctx import StageContext
+from seedpipe.src.stages import ingest as impl
+
+
+def run_whole(ctx: StageContext) -> None:
+    impl.run_whole(ctx)
+    ctx.validate_outputs('ingest', ['items.jsonl'])
+""".strip()
+            )
+
+            output_dir = root / "artifacts" / "outputs" / "demo-run"
+            code = run_generated_flow(
+                generated_dir=generated_dir,
+                run_id="demo-run",
+                attempt=2,
+                output_dir=output_dir,
+                inputs_dir=inputs_dir,
+            )
+
+            self.assertEqual(code, 0)
+            self.assertTrue((output_dir / "artifacts" / "items.jsonl").exists())
+
+
+
 if __name__ == "__main__":
     unittest.main()

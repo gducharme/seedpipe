@@ -36,6 +36,26 @@ def _mount_generated_package(generated_dir: Path) -> None:
         package.__path__ = [package_path, *existing_paths]  # type: ignore[attr-defined]
 
 
+def _mount_local_src_package(pipe_root: Path) -> None:
+    package_name = "seedpipe.src"
+    src_dir = pipe_root / "src"
+    if not src_dir.exists() or not src_dir.is_dir():
+        return
+
+    package_path = str(src_dir.resolve())
+    package = sys.modules.get(package_name)
+    if package is None:
+        package = types.ModuleType(package_name)
+        package.__path__ = [package_path]  # type: ignore[attr-defined]
+        package.__package__ = package_name
+        sys.modules[package_name] = package
+        return
+
+    existing_paths = list(getattr(package, "__path__", []))
+    if package_path not in existing_paths:
+        package.__path__ = [package_path, *existing_paths]  # type: ignore[attr-defined]
+
+
 def _purge_generated_modules() -> None:
     for module_name in list(sys.modules):
         if module_name == "seedpipe.generated" or module_name.startswith("seedpipe.generated."):
@@ -88,6 +108,7 @@ def run_generated_flow(
 
     _purge_generated_modules()
     _mount_generated_package(generated_dir)
+    _mount_local_src_package(generated_dir.parent)
 
     flow = importlib.import_module("seedpipe.generated.flow")
     with _pushd(run_output_dir):
