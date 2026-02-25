@@ -8,6 +8,7 @@ import importlib
 import os
 import shutil
 import sys
+import traceback
 import types
 from contextlib import contextmanager
 from pathlib import Path
@@ -86,6 +87,43 @@ def _mount_inputs(run_output_dir: Path, inputs_dir: Path) -> None:
         shutil.copytree(resolved_inputs, target)
 
 
+def _summarize_path(path: Path, label: str) -> str:
+    if not path.exists():
+        return f"- {label}: {path} (missing)"
+
+    if path.is_file():
+        size = path.stat().st_size
+        return f"- {label}: {path} (file, {size} bytes)"
+
+    children = sorted(path.iterdir(), key=lambda p: p.name)
+    preview = ", ".join(child.name for child in children[:10])
+    if len(children) > 10:
+        preview = f"{preview}, ..."
+    return f"- {label}: {path} (dir, {len(children)} entries: [{preview}])"
+
+
+def _emit_debug_report(exc: BaseException, generated_dir: Path, inputs_dir: Path, run_output_dir: Path) -> None:
+    print("\n[seedpipe-run] run failed; collecting diagnostics", file=sys.stderr)
+    print(_summarize_path(generated_dir, "generated-dir"), file=sys.stderr)
+    print(_summarize_path(inputs_dir, "inputs-dir"), file=sys.stderr)
+    print(_summarize_path(run_output_dir, "run-output-dir"), file=sys.stderr)
+
+    artifacts_root = run_output_dir / "artifacts"
+    print(_summarize_path(artifacts_root, "run artifacts root"), file=sys.stderr)
+    print(_summarize_path(artifacts_root / "inputs", "run artifacts inputs"), file=sys.stderr)
+    print(_summarize_path(artifacts_root / "outputs", "run artifacts outputs"), file=sys.stderr)
+
+    if isinstance(exc, FileNotFoundError):
+        missing = Path(exc.filename) if exc.filename else None
+        if missing is not None:
+            print(f"- missing path: {missing}", file=sys.stderr)
+            parent = missing.parent
+            print(_summarize_path(parent, "missing path parent"), file=sys.stderr)
+
+    print("- traceback:", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+
+
 def run_generated_flow(
     generated_dir: Path,
     run_id: str,
@@ -111,8 +149,12 @@ def run_generated_flow(
     _mount_local_src_package(generated_dir.parent)
 
     flow = importlib.import_module("seedpipe.generated.flow")
-    with _pushd(run_output_dir):
-        return int(flow.run(run_id=run_id, attempt=attempt))
+    try:
+        with _pushd(run_output_dir):
+            return int(flow.run(run_id=run_id, attempt=attempt))
+    except Exception as exc:
+        _emit_debug_report(exc, generated_dir=generated_dir, inputs_dir=inputs_dir, run_output_dir=run_output_dir)
+        raise
 
 
 def parse_args() -> argparse.Namespace:

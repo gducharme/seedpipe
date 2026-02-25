@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import io
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 from tools.run import run_generated_flow
@@ -160,6 +162,40 @@ def run_whole(ctx: StageContext) -> None:
             self.assertEqual(code, 0)
             self.assertTrue((output_dir / "artifacts" / "items.jsonl").exists())
 
+
+
+    def test_run_generated_flow_emits_debug_diagnostics_for_missing_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            generated_dir.mkdir()
+            inputs_dir = root / "artifacts" / "inputs"
+            inputs_dir.mkdir(parents=True)
+            (inputs_dir / "items.jsonl").write_text('{"item_id":"i-1"}\n')
+            (generated_dir / "flow.py").write_text(
+                """
+def run(run_id: str, attempt: int = 1) -> int:
+    raise FileNotFoundError(2, 'No such file or directory', 'artifacts/outputs/7/artifacts/word_frequency_report.json')
+""".strip()
+            )
+
+            output_dir = root / "artifacts" / "outputs" / "demo-run"
+            stderr = io.StringIO()
+            with self.assertRaises(FileNotFoundError):
+                with redirect_stderr(stderr):
+                    run_generated_flow(
+                        generated_dir=generated_dir,
+                        run_id="demo-run",
+                        attempt=2,
+                        output_dir=output_dir,
+                        inputs_dir=inputs_dir,
+                    )
+
+            report = stderr.getvalue()
+            self.assertIn("[seedpipe-run] run failed; collecting diagnostics", report)
+            self.assertIn("run artifacts outputs", report)
+            self.assertIn("word_frequency_report.json", report)
+            self.assertIn("traceback:", report)
 
 
 if __name__ == "__main__":
