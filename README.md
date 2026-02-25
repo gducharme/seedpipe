@@ -1,6 +1,45 @@
 # seedpipe
 
+## Seedpipe
+
+**Seedpipe is a universal, deterministic pipeline substrate for agent-first workflows.**
+
+It provides the minimal control plane required for autonomous systems to run, resume, compose, and audit long-running work — using the filesystem as the single source of truth and a compiler-owned runtime for execution.
+
+Instead of introducing a scheduler, queue, or orchestration service, Seedpipe models work as a **deterministic artifact state machine**:
+
+- Every run is fully reproducible from its inputs, spec, and source.
+- `rerun = resume` by construction.
+- All state is explicit, machine-readable, and auditable.
+- Agents operate the system by **writing files, executing the runner, and inspecting artifacts** — no hidden APIs.
+
+This makes Seedpipe:
+
+- **Agent-native** – autonomous coding/ops agents can safely control and evolve pipelines
+- **Composable** – pipelines chain through inbox/outbox conventions and fan-out into child runs
+- **Chainable** – pipelines chain can support entire product lifecycle, piece-by-piece until full workflow is captured in pipeline
+- **Idempotent by default** – side effects are tracked through artifact truth
+- **Portable** – no control-plane service or runtime database required
+- **Replayable & forkable** – any run can be reproduced or branched deterministically
+
+In practical terms, the same substrate can power:
+
+- CI/CD promotion and rollback
+- data platform ELT and backfills
+- financial and operational lifecycles
+- incident response workflows
+- iterative optimization loops
+
+without changing the core model.
+
+> **Seedpipe is not a workflow engine.  
+> It is the smallest expressive basis for reliable work in an agent-driven environment.**
+
 `seedpipe` can be installed directly from a local checkout without publishing to PyPI.
+
+## Roadmap tracking docs
+
+- Phase 4 agent-operable control plane tracking doc: `docs/phase3_agent_control_plane.md`
 
 ## Install from a local path
 
