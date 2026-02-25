@@ -12,6 +12,11 @@ dependencies = [
   "PyYAML>=6.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+]
+
 [project.scripts]
 seedpipe-compile = "tools.compile:main"
 seedpipe-scaffold = "tools.scaffold:main"
