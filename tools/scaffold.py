@@ -21,10 +21,17 @@ stages:
       - items.jsonl
     outputs:
       - transformed.jsonl
+  - id: future_review
+    mode: whole_run
+    placeholder: true
+    inputs:
+      - transformed.jsonl
+    outputs:
+      - reviewed.jsonl
   - id: publish
     mode: whole_run
     inputs:
-      - transformed.jsonl
+      - reviewed.jsonl
     outputs:
       - manifest.json
 """

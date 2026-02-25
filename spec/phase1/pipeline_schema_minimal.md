@@ -50,13 +50,17 @@ No branching, no retries, no parallelism. Just an ordered list of stages.
 - `outputs` *(list[string], required; non-empty)*
   Artifact names produced by this stage.
 
+- `placeholder` *(bool, optional; default `false`)*
+  When `true`, the stage is a documented no-op placeholder. It validates declared inputs/outputs but does not execute any implementation code.
+
 #### Minimal validation rules
 1. `stages` must be non-empty and **ordered** as written.
 2. Stage `id` values must be unique.
 3. Every `inputs[]` artifact name must have been produced by **some prior stage output** (no forward refs).
    *(Exception: future extension could allow declared “external inputs”; not in v0.)*
 4. No duplicate artifact names within a single `outputs[]`.
-5. Artifact names are simple strings (recommended: filenames like `items.jsonl`).
+5. `placeholder` must be a boolean when present.
+6. Artifact names are simple strings (recommended: filenames like `items.jsonl`).
 
 ---
 
@@ -83,8 +87,14 @@ stages:
     inputs: [transformed.jsonl]
     outputs: [validation.json]
 
+  - id: future_review
+    mode: whole_run
+    placeholder: true
+    inputs: [transformed.jsonl, validation.json]
+    outputs: [reviewed.json]
+
   - id: publish
     mode: whole_run
-    inputs: [transformed.jsonl, validation.json]
+    inputs: [reviewed.json]
     outputs: [published.marker]
 ```

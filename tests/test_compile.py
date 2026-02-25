@@ -141,6 +141,68 @@ class CompilePipelineTests(unittest.TestCase):
                 "manifest.schema.json",
             )
 
+    def test_compile_pipeline_supports_placeholder_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pipeline_path = root / "pipeline.yaml"
+            contracts_dir = root / "contracts"
+            output_dir = root / "generated"
+            contracts_dir.mkdir()
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "phase1-placeholder",
+                        "item_unit": "item",
+                        "determinism_policy": "strict",
+                        "stages": [
+                            {
+                                "id": "ingest",
+                                "mode": "whole_run",
+                                "inputs": [],
+                                "outputs": ["items.jsonl"],
+                            },
+                            {
+                                "id": "future_review",
+                                "mode": "whole_run",
+                                "placeholder": True,
+                                "inputs": ["items.jsonl"],
+                                "outputs": ["reviewed.jsonl"],
+                            },
+                            {
+                                "id": "publish",
+                                "mode": "whole_run",
+                                "inputs": ["reviewed.jsonl"],
+                                "outputs": ["published_manifest.json"],
+                            },
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=output_dir,
+                )
+            )
+
+            placeholder_wrapper = (output_dir / "stages" / "future_review.py").read_text()
+            self.assertIn("def run_whole", placeholder_wrapper)
+            self.assertNotIn("from seedpipe.src.stages import future_review as impl", placeholder_wrapper)
+            self.assertIn("ctx.validate_inputs", placeholder_wrapper)
+            self.assertIn("ctx.validate_outputs", placeholder_wrapper)
+
 
 if __name__ == "__main__":
     unittest.main()
