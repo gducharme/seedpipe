@@ -88,10 +88,11 @@ def _mount_inputs(run_output_dir: Path, inputs_dir: Path) -> None:
 
 def run_generated_flow(
     generated_dir: Path,
-    run_id: str,
+    run_id: str | None = None,
     attempt: int = 1,
     output_dir: Path | None = None,
     inputs_dir: Path = DEFAULT_INPUTS_DIR,
+    run_config: dict[str, object] | None = None,
 ) -> int:
     flow_path = generated_dir / "flow.py"
     if not flow_path.exists():
@@ -100,7 +101,15 @@ def run_generated_flow(
     if not inputs_dir.exists() or not inputs_dir.is_dir():
         raise FileNotFoundError(f"inputs directory not found: {inputs_dir}")
 
-    run_output_dir = output_dir if output_dir is not None else _default_run_output_dir(run_id)
+
+    effective_run_config = dict(run_config or {})
+    if run_id is not None:
+        effective_run_config.setdefault('run_id', run_id)
+
+    effective_run_id = effective_run_config.get('run_id')
+    if not isinstance(effective_run_id, str) or not effective_run_id.strip():
+        raise ValueError('run_config must include a non-empty string run_id')
+    run_output_dir = output_dir if output_dir is not None else _default_run_output_dir(effective_run_id)
     if run_output_dir.exists():
         raise FileExistsError(f"refusing to overwrite existing run directory: {run_output_dir}")
     run_output_dir.mkdir(parents=True, exist_ok=False)
@@ -112,7 +121,7 @@ def run_generated_flow(
 
     flow = importlib.import_module("seedpipe.generated.flow")
     with _pushd(run_output_dir):
-        return int(flow.run(run_id=run_id, attempt=attempt))
+        return int(flow.run(run_config=effective_run_config, attempt=attempt))
 
 
 def parse_args() -> argparse.Namespace:

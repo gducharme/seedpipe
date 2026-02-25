@@ -22,9 +22,9 @@ class RunCommandTests(unittest.TestCase):
 from pathlib import Path
 
 
-def run(run_id: str, attempt: int = 1) -> int:
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
     marker = Path('marker.txt')
-    marker.write_text(f"{run_id}:{attempt}")
+    marker.write_text(f"{run_config['run_id']}:{attempt}")
     assert Path('artifacts/inputs/items.jsonl').exists()
     return 0
 """.strip()
@@ -42,6 +42,36 @@ def run(run_id: str, attempt: int = 1) -> int:
             self.assertEqual(code, 0)
             self.assertEqual((output_dir / "marker.txt").read_text(), "demo-run:2")
 
+    def test_run_generated_flow_passes_flexible_run_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            generated_dir.mkdir()
+            inputs_dir = root / "artifacts" / "inputs"
+            inputs_dir.mkdir(parents=True)
+            (generated_dir / "flow.py").write_text(
+                """
+from pathlib import Path
+
+
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
+    Path('config.txt').write_text(f"{run_config['run_id']}:{run_config['trace_id']}:{attempt}")
+    return 0
+""".strip()
+            )
+
+            output_dir = root / "artifacts" / "outputs" / "configured-run"
+            code = run_generated_flow(
+                generated_dir=generated_dir,
+                attempt=4,
+                output_dir=output_dir,
+                inputs_dir=inputs_dir,
+                run_config={"run_id": "configured-run", "trace_id": "t-1"},
+            )
+
+            self.assertEqual(code, 0)
+            self.assertEqual((output_dir / "config.txt").read_text(), "configured-run:t-1:4")
+
     def test_run_generated_flow_uses_default_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -53,8 +83,8 @@ def run(run_id: str, attempt: int = 1) -> int:
 from pathlib import Path
 
 
-def run(run_id: str, attempt: int = 1) -> int:
-    Path('ran.txt').write_text(run_id)
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
+    Path('ran.txt').write_text(str(run_config['run_id']))
     return 0
 """.strip()
             )
@@ -76,7 +106,7 @@ def run(run_id: str, attempt: int = 1) -> int:
             generated_dir.mkdir()
             inputs_dir = root / "artifacts" / "inputs"
             inputs_dir.mkdir(parents=True)
-            (generated_dir / "flow.py").write_text("def run(run_id: str, attempt: int = 1) -> int:\n    return 0\n")
+            (generated_dir / "flow.py").write_text("def run(run_config: dict[str, object], attempt: int = 1) -> int:\n    return 0\n")
             output_dir = root / "artifacts" / "outputs" / "existing-run"
             output_dir.mkdir(parents=True)
 
@@ -95,11 +125,10 @@ def run(run_id: str, attempt: int = 1) -> int:
             root = Path(tmp)
             generated_dir = root / "generated"
             generated_dir.mkdir()
-            (generated_dir / "flow.py").write_text("def run(run_id: str, attempt: int = 1) -> int:\n    return 0\n")
+            (generated_dir / "flow.py").write_text("def run(run_config: dict[str, object], attempt: int = 1) -> int:\n    return 0\n")
 
             with self.assertRaises(FileNotFoundError):
                 run_generated_flow(generated_dir=generated_dir, run_id="missing-inputs", inputs_dir=root / "does-not-exist")
-
 
     def test_run_generated_flow_mounts_local_src_package_for_stage_impls(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -129,8 +158,8 @@ from seedpipe.generated.stages import ingest
 from seedpipe.runtime.ctx import StageContext
 
 
-def run(run_id: str, attempt: int = 1) -> int:
-    ctx = StageContext.make_base(run_id=run_id).for_stage('ingest', attempt=attempt)
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
+    ctx = StageContext.make_base(run_config=run_config).for_stage('ingest', attempt=attempt)
     ingest.run_whole(ctx)
     return 0
 """.strip()
@@ -159,7 +188,6 @@ def run_whole(ctx: StageContext) -> None:
 
             self.assertEqual(code, 0)
             self.assertTrue((output_dir / "artifacts" / "items.jsonl").exists())
-
 
 
 if __name__ == "__main__":

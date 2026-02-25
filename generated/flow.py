@@ -26,8 +26,9 @@ STAGES = ['ingest', 'transform', 'validate', 'future_review', 'publish']
 def now_rfc3339() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-def run(run_id: str, attempt: int = 1) -> int:
-    ctx_base = StageContext.make_base(run_id=run_id)
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
+    run_id = str(run_config['run_id'])
+    ctx_base = StageContext.make_base(run_config=run_config)
     ctx = ctx_base.for_stage('ingest', attempt=attempt)
     stage_ingest.run_whole(ctx)
     ctx = ctx_base.for_stage('transform', attempt=attempt)
@@ -74,7 +75,7 @@ def main() -> None:
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--attempt', type=int, default=1)
     args = parser.parse_args()
-    code = run(run_id=args.run_id, attempt=args.attempt)
+    code = run(run_config={'run_id': args.run_id}, attempt=args.attempt)
     raise SystemExit(code)
 
 if __name__ == '__main__':
