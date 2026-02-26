@@ -190,6 +190,32 @@ Each stage entry supports:
   - Compiler skips importing user stage code for placeholder stages.
   - Input/output validation still applies, so placeholders should be used carefully.
 
+### Optional DSL expansion (`foreach`, `family`, `bind`, `pattern`)
+
+The compiler can also expand a higher-level DSL into the same linear stage model used by runtime wrappers.
+
+Supported forms:
+
+- Stage fan-out:
+  - `foreach: <dot.path.to.list>` with `as: <var>` at stage level creates one concrete stage per value.
+  - Concrete stage IDs are suffixed as `<id>__<value>` (sanitized for module-safe names).
+
+- Family outputs:
+  - In `outputs`, an object entry can declare a keyed family artifact:
+    - `family`: family name
+    - `pattern`: templated concrete path (for example `pass1_pre/{lang}/paragraphs.jsonl`)
+    - key source via either:
+      - `bind: <var>` (uses current scope variable), or
+      - `foreach` + `as` inside the output object (fan-out inside a single stage)
+
+- Family inputs:
+  - In `inputs`, an object entry with `family` + `bind` resolves to the concrete artifact path previously registered for that family key.
+
+- Templating:
+  - String `inputs` and `outputs` may include `{var}` placeholders resolved from stage/output scope variables.
+
+The expanded result is still validated using normal Phase-1 rules (`inputs`/`outputs` become plain string arrays before validation and code generation).
+
 ### Artifact wiring rules (important)
 
 1. **No forward references in `inputs`**: a stage cannot consume an artifact that has not already been declared as an output of an earlier stage.

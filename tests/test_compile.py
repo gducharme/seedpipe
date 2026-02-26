@@ -24,6 +24,202 @@ class CompilePipelineTests(unittest.TestCase):
         self.assertEqual(normalized["stages"][0]["inputs"], [])
         self.assertEqual(normalized["stages"][0]["mode"], "whole_run")
 
+
+
+    def test_normalize_pipeline_expands_foreach_family_bind_dsl(self) -> None:
+        raw = {
+            "pipeline_id": "translation-pipeline",
+            "item_unit": "paragraph",
+            "determinism_policy": "strict",
+            "params": {"targets": {"languages": ["fr", "de", "ar"]}},
+            "stages": [
+                {
+                    "id": "translate_pass1",
+                    "mode": "whole_run",
+                    "inputs": ["paragraphs.jsonl"],
+                    "outputs": [
+                        {
+                            "family": "pass1_translations",
+                            "foreach": "params.targets.languages",
+                            "as": "lang",
+                            "pattern": "pass1_pre/{lang}/paragraphs.jsonl",
+                        }
+                    ],
+                },
+                {
+                    "id": "translate_pass2",
+                    "mode": "whole_run",
+                    "foreach": "params.targets.languages",
+                    "as": "lang",
+                    "inputs": [
+                        "paragraphs.jsonl",
+                        {"family": "pass1_translations", "bind": "lang"},
+                    ],
+                    "outputs": [
+                        {
+                            "family": "pass2_translations",
+                            "bind": "lang",
+                            "pattern": "pass2_pre/{lang}/paragraphs.jsonl",
+                        }
+                    ],
+                },
+            ],
+        }
+
+        normalized = normalize_pipeline(raw)
+
+        stages = normalized["stages"]
+        self.assertEqual(stages[0]["outputs"], [
+            "pass1_pre/fr/paragraphs.jsonl",
+            "pass1_pre/de/paragraphs.jsonl",
+            "pass1_pre/ar/paragraphs.jsonl",
+        ])
+        self.assertEqual(stages[1]["id"], "translate_pass2__fr")
+        self.assertEqual(stages[1]["inputs"], ["paragraphs.jsonl", "pass1_pre/fr/paragraphs.jsonl"])
+        self.assertEqual(stages[2]["id"], "translate_pass2__de")
+        self.assertEqual(stages[2]["inputs"], ["paragraphs.jsonl", "pass1_pre/de/paragraphs.jsonl"])
+        self.assertEqual(stages[3]["id"], "translate_pass2__ar")
+        self.assertEqual(stages[3]["inputs"], ["paragraphs.jsonl", "pass1_pre/ar/paragraphs.jsonl"])
+
+    def test_normalize_pipeline_rejects_unresolved_family_bind(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "stages": [
+                {
+                    "id": "consumer",
+                    "foreach": "params.targets.languages",
+                    "as": "lang",
+                    "inputs": [{"family": "pass1_translations", "bind": "lang"}],
+                    "outputs": ["out.json"],
+                }
+            ],
+            "params": {"targets": {"languages": ["fr"]}},
+        }
+
+        with self.assertRaises(CompileError):
+            normalize_pipeline(raw)
+
+    def test_normalize_pipeline_rejects_stage_foreach_non_string_expression(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "stages": [{"id": "s1", "foreach": ["bad"], "as": "lang", "outputs": ["x.json"]}],
+        }
+
+        with self.assertRaises(CompileError):
+            normalize_pipeline(raw)
+
+    def test_normalize_pipeline_rejects_stage_foreach_non_list_resolution(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "params": {"targets": {"languages": "fr"}},
+            "stages": [
+                {"id": "s1", "foreach": "params.targets.languages", "as": "lang", "outputs": ["x.json"]}
+            ],
+        }
+
+        with self.assertRaises(CompileError):
+            normalize_pipeline(raw)
+
+    def test_normalize_pipeline_rejects_stage_foreach_missing_as(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "params": {"targets": {"languages": ["fr"]}},
+            "stages": [{"id": "s1", "foreach": "params.targets.languages", "outputs": ["x.json"]}],
+        }
+
+        with self.assertRaises(CompileError):
+            normalize_pipeline(raw)
+
+    def test_normalize_pipeline_rejects_output_family_missing_bind_source(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "stages": [
+                {
+                    "id": "producer",
+                    "outputs": [{"family": "f", "pattern": "out/{lang}.json"}],
+                }
+            ],
+        }
+
+        with self.assertRaises(CompileError):
+            normalize_pipeline(raw)
+
+    def test_normalize_pipeline_rejects_output_family_bind_out_of_scope(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "stages": [
+                {
+                    "id": "producer",
+                    "outputs": [{"family": "f", "bind": "lang", "pattern": "out/{lang}.json"}],
+                }
+            ],
+        }
+
+        with self.assertRaises(CompileError):
+            normalize_pipeline(raw)
+
+    def test_normalize_pipeline_rejects_family_key_conflicts(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "params": {"targets": {"languages": ["fr"]}},
+            "stages": [
+                {
+                    "id": "producer_1",
+                    "foreach": "params.targets.languages",
+                    "as": "lang",
+                    "outputs": [{"family": "f", "bind": "lang", "pattern": "out/{lang}.json"}],
+                },
+                {
+                    "id": "producer_2",
+                    "foreach": "params.targets.languages",
+                    "as": "lang",
+                    "outputs": [{"family": "f", "bind": "lang", "pattern": "other/{lang}.json"}],
+                },
+            ],
+        }
+
+        with self.assertRaises(CompileError):
+            normalize_pipeline(raw)
+
+    def test_normalize_pipeline_rejects_template_variable_not_in_scope(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "stages": [{"id": "producer", "outputs": ["out/{lang}.json"]}],
+        }
+
+        with self.assertRaises(CompileError):
+            normalize_pipeline(raw)
+
+    def test_normalize_pipeline_supports_output_level_foreach(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "params": {"targets": {"languages": ["fr", "de"]}},
+            "stages": [
+                {
+                    "id": "producer",
+                    "outputs": [
+                        {
+                            "family": "f",
+                            "foreach": "params.targets.languages",
+                            "as": "lang",
+                            "pattern": "out/{lang}.json",
+                        }
+                    ],
+                },
+                {
+                    "id": "consumer",
+                    "foreach": "params.targets.languages",
+                    "as": "lang",
+                    "inputs": [{"family": "f", "bind": "lang"}],
+                    "outputs": ["done/{lang}.json"],
+                },
+            ],
+        }
+
+        normalized = normalize_pipeline(raw)
+        self.assertEqual(normalized["stages"][0]["outputs"], ["out/fr.json", "out/de.json"])
+        self.assertEqual(normalized["stages"][1]["inputs"], ["out/fr.json"])
+        self.assertEqual(normalized["stages"][2]["inputs"], ["out/de.json"])
     def test_validate_pipeline_structure_rejects_forward_references(self) -> None:
         normalized = {
             "pipeline_id": "p1",

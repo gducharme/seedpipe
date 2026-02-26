@@ -83,8 +83,181 @@ def load_pipeline(path: Path) -> dict[str, Any]:
     return data
 
 
+def _resolve_path_expr(root: dict[str, Any], expr: str) -> Any:
+    parts = expr.split(".")
+    cursor: Any = root
+    for part in parts:
+        if not isinstance(cursor, dict) or part not in cursor:
+            raise CompileError(f"unable to resolve expression: {expr}")
+        cursor = cursor[part]
+    return cursor
+
+
+def _render_template(value: str, scope: dict[str, Any]) -> str:
+    def _replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in scope:
+            raise CompileError(f"template variable '{key}' not found in stage scope")
+        return str(scope[key])
+
+    return re.sub(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}", _replace, value)
+
+
+def _safe_stage_suffix(value: Any) -> str:
+    token = re.sub(r"[^a-zA-Z0-9_]", "_", str(value)).strip("_")
+    if not token:
+        token = "key"
+    if token[0].isdigit():
+        token = f"k_{token}"
+    return token
+
+
+def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
+    expanded = dict(raw)
+    source_stages = expanded.get("stages", [])
+    if source_stages is None:
+        source_stages = []
+    if not isinstance(source_stages, list):
+        raise CompileError("pipeline.stages must be an array")
+
+    family_outputs: dict[str, dict[str, str]] = {}
+    concrete_stages: list[dict[str, Any]] = []
+
+    for idx, stage in enumerate(source_stages):
+        if not isinstance(stage, dict):
+            raise CompileError(f"pipeline.stages[{idx}] must be an object")
+
+        stage_id = stage.get("id")
+        if not isinstance(stage_id, str) or not stage_id.strip():
+            raise CompileError(f"pipeline.stages[{idx}].id must be a non-empty string")
+
+        stage_foreach = stage.get("foreach")
+        stage_as = stage.get("as")
+
+        stage_bindings: list[dict[str, Any]] = [{}]
+        if stage_foreach is not None:
+            if not isinstance(stage_foreach, str):
+                raise CompileError(f"pipeline.stages[{idx}].foreach must be a string expression")
+            values = _resolve_path_expr(raw, stage_foreach)
+            if not isinstance(values, list):
+                raise CompileError(f"pipeline.stages[{idx}].foreach must resolve to a list")
+            if not isinstance(stage_as, str) or not stage_as:
+                raise CompileError(f"pipeline.stages[{idx}].as must be a non-empty string when foreach is set")
+            stage_bindings = [{stage_as: value} for value in values]
+
+        for binding in stage_bindings:
+            instance = dict(stage)
+            if stage_foreach is not None:
+                suffix = _safe_stage_suffix(binding[stage_as])
+                instance["id"] = f"{stage_id}__{suffix}"
+            instance.pop("foreach", None)
+            instance.pop("as", None)
+
+            inputs_raw = instance.get("inputs", [])
+            outputs_raw = instance.get("outputs", [])
+            if not isinstance(inputs_raw, list) or not isinstance(outputs_raw, list):
+                raise CompileError(f"pipeline.stages[{idx}].inputs/outputs must be arrays")
+
+            concrete_inputs: list[str] = []
+            for input_idx, entry in enumerate(inputs_raw):
+                if isinstance(entry, str):
+                    concrete_inputs.append(_render_template(entry, binding))
+                    continue
+                if not isinstance(entry, dict):
+                    raise CompileError(f"pipeline.stages[{idx}].inputs[{input_idx}] must be a string or object")
+                family = entry.get("family")
+                bind = entry.get("bind")
+                if not isinstance(family, str) or not isinstance(bind, str):
+                    raise CompileError(
+                        f"pipeline.stages[{idx}].inputs[{input_idx}] family refs require string 'family' and 'bind'"
+                    )
+                if bind not in binding:
+                    raise CompileError(
+                        f"pipeline.stages[{idx}].inputs[{input_idx}] bind variable '{bind}' not in stage scope"
+                    )
+                key = str(binding[bind])
+                family_map = family_outputs.get(family, {})
+                if key not in family_map:
+                    raise CompileError(
+                        f"pipeline.stages[{idx}].inputs[{input_idx}] unresolved family reference: {family}[{key}]"
+                    )
+                concrete_inputs.append(family_map[key])
+
+            concrete_outputs: list[str] = []
+            for output_idx, entry in enumerate(outputs_raw):
+                if isinstance(entry, str):
+                    concrete_outputs.append(_render_template(entry, binding))
+                    continue
+                if not isinstance(entry, dict):
+                    raise CompileError(f"pipeline.stages[{idx}].outputs[{output_idx}] must be a string or object")
+
+                family = entry.get("family")
+                pattern = entry.get("pattern")
+                if not isinstance(family, str) or not isinstance(pattern, str):
+                    raise CompileError(
+                        f"pipeline.stages[{idx}].outputs[{output_idx}] family outputs require string 'family' and 'pattern'"
+                    )
+
+                out_foreach = entry.get("foreach")
+                out_as = entry.get("as")
+                out_bind = entry.get("bind")
+
+                output_bindings: list[dict[str, Any]] = [dict(binding)]
+                if out_foreach is not None:
+                    if not isinstance(out_foreach, str):
+                        raise CompileError(
+                            f"pipeline.stages[{idx}].outputs[{output_idx}].foreach must be a string expression"
+                        )
+                    values = _resolve_path_expr(raw, out_foreach)
+                    if not isinstance(values, list):
+                        raise CompileError(
+                            f"pipeline.stages[{idx}].outputs[{output_idx}].foreach must resolve to a list"
+                        )
+                    if not isinstance(out_as, str) or not out_as:
+                        raise CompileError(
+                            f"pipeline.stages[{idx}].outputs[{output_idx}].as must be a non-empty string"
+                        )
+                    output_bindings = [
+                        {
+                            **binding,
+                            out_as: value,
+                        }
+                        for value in values
+                    ]
+
+                family_map = family_outputs.setdefault(family, {})
+                for out_binding in output_bindings:
+                    if isinstance(out_bind, str):
+                        bind_var = out_bind
+                    elif out_foreach is not None and isinstance(out_as, str):
+                        bind_var = out_as
+                    else:
+                        raise CompileError(
+                            f"pipeline.stages[{idx}].outputs[{output_idx}] requires 'bind' or foreach/as to select family key"
+                        )
+                    if bind_var not in out_binding:
+                        raise CompileError(
+                            f"pipeline.stages[{idx}].outputs[{output_idx}] bind variable '{bind_var}' not in stage scope"
+                        )
+                    key = str(out_binding[bind_var])
+                    path = _render_template(pattern, out_binding)
+                    if key in family_map and family_map[key] != path:
+                        raise CompileError(
+                            f"pipeline.stages[{idx}].outputs[{output_idx}] family '{family}' key '{key}' conflict"
+                        )
+                    family_map[key] = path
+                    concrete_outputs.append(path)
+
+            instance["inputs"] = concrete_inputs
+            instance["outputs"] = concrete_outputs
+            concrete_stages.append(instance)
+
+    expanded["stages"] = concrete_stages
+    return expanded
+
+
 def normalize_pipeline(raw: dict[str, Any]) -> dict[str, Any]:
-    normalized = dict(raw)
+    normalized = expand_pipeline_dsl(raw)
     normalized.setdefault("pipeline_id", "pipeline")
     normalized.setdefault("item_unit", "item")
     normalized.setdefault("determinism_policy", "strict")
