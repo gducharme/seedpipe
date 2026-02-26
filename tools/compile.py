@@ -536,11 +536,16 @@ def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
     wrapper_name = mode_fn
     mode_signature = "ctx: StageContext" if stage.mode == "whole_run" else "ctx: StageContext, item: dict[str, Any]"
     mode_call = "impl.run_whole(ctx)" if stage.mode == "whole_run" else "impl.run_item(ctx, item)"
+    validate_outputs_call = (
+        "    outputs_to_validate = [str(item.get('path', '')) for item in (ctx.expected_outputs or []) if item.get('path')] or OUTPUTS\n"
+        "    ctx.validate_outputs(STAGE_ID, outputs_to_validate)\n"
+    )
     item_result_return = (
         "    item_id = item.get('item_id', '')\n"
         "    try:\n"
         f"        {mode_call}\n"
-        "        ctx.validate_outputs(STAGE_ID, OUTPUTS)\n"
+        "        outputs_to_validate = [str(item.get('path', '')) for item in (ctx.expected_outputs or []) if item.get('path')] or OUTPUTS\n"
+        "        ctx.validate_outputs(STAGE_ID, outputs_to_validate)\n"
         "        return ItemResult(item_id=str(item_id), ok=True)\n"
         "    except Exception as exc:\n"
         "        return ItemResult(\n"
@@ -549,7 +554,7 @@ def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
         "            error={'code': 'stage_exception', 'message': str(exc)},\n"
         "        )\n"
     )
-    whole_return = f"    {mode_call}\n" "    ctx.validate_outputs(STAGE_ID, OUTPUTS)\n"
+    whole_return = f"    {mode_call}\n" + validate_outputs_call
     function_body = (
         "    pass\n"
         if stage.placeholder and stage.mode == "whole_run"
