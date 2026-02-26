@@ -7,19 +7,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from seedpipe.tools.types import ArtifactRef, Defect, DefectLocation, DefectType, Manifest
+
 from seedpipe.tools.contracts import TinySchemaValidator, ValidationIssue, load_schema_store, resolve_contract
 from seedpipe.tools.diff import diff_manifests
 from seedpipe.tools.runner import run_fixture_allow_failure, run_fixture_once
-
-ALLOWED_TYPES = {
-    "contract_validation_failed",
-    "contract_missing_schema",
-    "contract_missing_artifact",
-    "determinism_mismatch",
-    "resume_mismatch",
-    "resume_incomplete",
-}
-
 
 class Verifier:
     def __init__(self, fixture: str, max_errors: int = 20) -> None:
@@ -31,9 +23,8 @@ class Verifier:
         self.validator = TinySchemaValidator(self.schemas)
         self.failures = 0
 
-    def emit_defect(self, defect: dict[str, Any]) -> None:
-        d_type = defect["type"]
-        assert d_type in ALLOWED_TYPES
+    def emit_defect(self, defect: Defect) -> None:
+        d_type: DefectType = defect["type"]
         scope = defect.get("location", {}).get("stage_id") or "global"
         material = json.dumps({"type": d_type, "location": defect.get("location", {}), "message": defect.get("message", "")}, sort_keys=True)
         short_hash = hashlib.sha256(material.encode("utf-8")).hexdigest()[:8]
@@ -42,7 +33,7 @@ class Verifier:
         path.write_text(json.dumps(defect, indent=2, sort_keys=True) + "\n")
         self.failures += 1
 
-    def mk_defect(self, defect_type: str, location: dict[str, Any], message: str, hint: str, evidence: dict[str, Any]) -> dict[str, Any]:
+    def mk_defect(self, defect_type: DefectType, location: DefectLocation, message: str, hint: str, evidence: dict[str, Any]) -> Defect:
         return {
             "defect_version": "phase1-v0",
             "type": defect_type,
@@ -54,11 +45,11 @@ class Verifier:
             "created_at": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
         }
 
-    def _iter_artifacts(self, manifest: dict[str, Any]) -> list[dict[str, Any]]:
-        refs = list(manifest.get("inputs", []))
+    def _iter_artifacts(self, manifest: Manifest) -> list[ArtifactRef]:
+        refs: list[ArtifactRef] = list(manifest.get("inputs", []))
         for stage in manifest.get("stage_outputs", []):
             for out in stage.get("outputs", []):
-                ref = dict(out)
+                ref: ArtifactRef = dict(out)
                 ref["_stage_id"] = stage.get("stage_id")
                 refs.append(ref)
         for out in manifest.get("final_outputs", []):
@@ -71,7 +62,7 @@ class Verifier:
             return [ValidationIssue(pointer=pointer_base or "/", message=f"unknown schema id {schema_id}")]
         return self.validator.validate(data, schema, pointer_base)
 
-    def contract_test(self, manifest: dict[str, Any], manifest_path: Path) -> None:
+    def contract_test(self, manifest: Manifest, manifest_path: Path) -> None:
         manifest_schema = "seedpipe://spec/phase1/contracts/manifest.schema.json"
         issues = self._validate_data(manifest, manifest_schema, "")
         if issues:

@@ -238,6 +238,7 @@ The scaffold tests assert:
 - No persistent DB state management; filesystem is authoritative.
 - `tools/agent_loop.py` does not yet implement control-loop behavior.
 - Contract validation beyond compile-time mapping exists in `seedpipe.tools.verify`, but this document focuses on core compile/run/scaffold and tested guarantees.
+- Verifier/runner typed contracts now model manifests, artifact refs, and defects using `TypedDict` + `Literal` aliases (`seedpipe.tools.types`) while preserving runtime behavior.
 
 ## 6) Operational Notes for Contributors
 
