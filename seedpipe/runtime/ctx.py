@@ -12,7 +12,7 @@ class StageContext:
     stage_id: str | None = None
     attempt: int = 1
     run_dir: Path = Path(".")
-    bindings: dict[str, str] | None = None
+    keys: dict[str, str] | None = None
     expected_outputs: list[dict[str, Any]] | None = None
 
     @classmethod
@@ -26,7 +26,7 @@ class StageContext:
         self,
         stage_id: str,
         attempt: int = 1,
-        bindings: dict[str, str] | None = None,
+        keys: dict[str, str] | None = None,
         expected_outputs: list[dict[str, Any]] | None = None,
     ) -> "StageContext":
         return StageContext(
@@ -35,7 +35,7 @@ class StageContext:
             stage_id=stage_id,
             attempt=attempt,
             run_dir=self.run_dir,
-            bindings=dict(bindings or {}),
+            keys=dict(keys or {}),
             expected_outputs=[dict(item) for item in (expected_outputs or [])],
         )
 

@@ -31,7 +31,7 @@ class StageIR:
     mode: Literal["whole_run", "per_item"]
     inputs: tuple[str, ...]
     outputs: tuple[str, ...]
-    bindings: tuple[tuple[str, str], ...]
+    keys: tuple[tuple[str, str], ...]
     expected_outputs: tuple[dict[str, Any], ...]
     placeholder: bool
 
@@ -140,7 +140,6 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(source_stages, list):
         raise CompileError("pipeline.stages must be an array")
 
-    family_outputs: dict[str, dict[str, str]] = {}
     concrete_stages: list[dict[str, Any]] = []
 
     for idx, stage in enumerate(source_stages):
@@ -152,7 +151,7 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
             raise CompileError(f"pipeline.stages[{idx}].id must be a non-empty string")
 
         stage_foreach = stage.get("foreach")
-        stage_as = stage.get("as")
+        stage_key = stage.get("key")
 
         stage_bindings: list[dict[str, Any]] = [{}]
         if stage_foreach is not None:
@@ -161,9 +160,9 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
             values = _resolve_path_expr(raw, stage_foreach)
             if not isinstance(values, list):
                 raise CompileError(f"pipeline.stages[{idx}].foreach must resolve to a list")
-            if not isinstance(stage_as, str) or not stage_as:
-                raise CompileError(f"pipeline.stages[{idx}].as must be a non-empty string when foreach is set")
-            stage_bindings = [{stage_as: value} for value in values]
+            if not isinstance(stage_key, str) or not stage_key:
+                raise CompileError(f"pipeline.stages[{idx}].key must be a non-empty string when foreach is set")
+            stage_bindings = [{stage_key: value} for value in values]
 
         for binding in stage_bindings:
             instance = dict(stage)
@@ -172,10 +171,10 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                 for key, value in binding.items()
             }
             if stage_foreach is not None:
-                suffix = _safe_stage_suffix(binding[stage_as])
+                suffix = _safe_stage_suffix(binding[stage_key])
                 instance["id"] = f"{stage_id}__{suffix}"
             instance.pop("foreach", None)
-            instance.pop("as", None)
+            instance.pop("key", None)
 
             inputs_raw = instance.get("inputs", [])
             outputs_raw = instance.get("outputs", [])
@@ -190,22 +189,14 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                 if not isinstance(entry, dict):
                     raise CompileError(f"pipeline.stages[{idx}].inputs[{input_idx}] must be a string or object")
                 family = entry.get("family")
-                bind = entry.get("bind")
-                if not isinstance(family, str) or not isinstance(bind, str):
+                pattern = entry.get("pattern")
+                schema = entry.get("schema")
+                if not isinstance(family, str) or not isinstance(pattern, str) or not isinstance(schema, str):
                     raise CompileError(
-                        f"pipeline.stages[{idx}] (id='{stage_id}').inputs[{input_idx}] family refs require string 'family' and 'bind'"
+                        f"pipeline.stages[{idx}] (id='{stage_id}').inputs[{input_idx}] object entries require string 'family', 'pattern', and 'schema'"
                     )
-                if bind not in binding:
-                    raise CompileError(
-                        f"pipeline.stages[{idx}] (id='{stage_id}').inputs[{input_idx}] bind variable '{bind}' not in stage scope"
-                    )
-                key = str(binding[bind])
-                family_map = family_outputs.get(family, {})
-                if key not in family_map:
-                    raise CompileError(
-                        f"pipeline.stages[{idx}] (id='{stage_id}').inputs[{input_idx}] unresolved family reference: {family}[{key}]"
-                    )
-                concrete_inputs.append(family_map[key])
+                _ = family, schema
+                concrete_inputs.append(_render_template(pattern, binding))
 
             concrete_outputs: list[str] = []
             expected_outputs: list[dict[str, Any]] = []
@@ -217,7 +208,7 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                         {
                             "pattern": entry,
                             "path": concrete_path,
-                            "bindings": dict(sorted((str(k), str(v)) for k, v in binding.items())),
+                            "keys": dict(sorted((str(k), str(v)) for k, v in binding.items())),
                         }
                     )
                     continue
@@ -226,14 +217,14 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
 
                 family = entry.get("family")
                 pattern = entry.get("pattern")
-                if not isinstance(family, str) or not isinstance(pattern, str):
+                schema = entry.get("schema")
+                if not isinstance(family, str) or not isinstance(pattern, str) or not isinstance(schema, str):
                     raise CompileError(
-                        f"pipeline.stages[{idx}].outputs[{output_idx}] family outputs require string 'family' and 'pattern'"
+                        f"pipeline.stages[{idx}].outputs[{output_idx}] object entries require string 'family', 'pattern', and 'schema'"
                     )
 
                 out_foreach = entry.get("foreach")
-                out_as = entry.get("as")
-                out_bind = entry.get("bind")
+                out_key = entry.get("key")
 
                 output_bindings: list[dict[str, Any]] = [dict(binding)]
                 if out_foreach is not None:
@@ -246,47 +237,27 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                         raise CompileError(
                             f"pipeline.stages[{idx}].outputs[{output_idx}].foreach must resolve to a list"
                         )
-                    if not isinstance(out_as, str) or not out_as:
+                    if not isinstance(out_key, str) or not out_key:
                         raise CompileError(
-                            f"pipeline.stages[{idx}].outputs[{output_idx}].as must be a non-empty string"
+                            f"pipeline.stages[{idx}].outputs[{output_idx}].key must be a non-empty string"
                         )
                     output_bindings = [
                         {
                             **binding,
-                            out_as: value,
+                            out_key: value,
                         }
                         for value in values
                     ]
-
-                family_map = family_outputs.setdefault(family, {})
                 for out_binding in output_bindings:
-                    if isinstance(out_bind, str):
-                        bind_var = out_bind
-                    elif out_foreach is not None and isinstance(out_as, str):
-                        bind_var = out_as
-                    else:
-                        raise CompileError(
-                            f"pipeline.stages[{idx}].outputs[{output_idx}] requires 'bind' or foreach/as to select family key"
-                        )
-                    if bind_var not in out_binding:
-                        raise CompileError(
-                            f"pipeline.stages[{idx}].outputs[{output_idx}] bind variable '{bind_var}' not in stage scope"
-                        )
-                    key = str(out_binding[bind_var])
                     path = _render_template(pattern, out_binding)
-                    if key in family_map and family_map[key] != path:
-                        raise CompileError(
-                            f"pipeline.stages[{idx}].outputs[{output_idx}] family '{family}' key '{key}' conflict"
-                        )
-                    family_map[key] = path
                     concrete_outputs.append(path)
                     expected_outputs.append(
                         {
                             "family": family,
                             "pattern": pattern,
-                            "bind": bind_var,
+                            "schema": schema,
                             "path": path,
-                            "bindings": dict(sorted((str(k), str(v)) for k, v in out_binding.items())),
+                            "keys": dict(sorted((str(k), str(v)) for k, v in out_binding.items())),
                         }
                     )
 
@@ -383,7 +354,7 @@ def build_ir(pipeline: dict[str, Any]) -> PipelineIR:
             mode=stage["mode"],
             inputs=tuple(stage["inputs"]),
             outputs=tuple(stage["outputs"]),
-            bindings=tuple(sorted((str(k), str(v)) for k, v in stage.get("_bindings", {}).items())),
+            keys=tuple(sorted((str(k), str(v)) for k, v in stage.get("_bindings", {}).items())),
             expected_outputs=tuple(stage.get("_expected_outputs", [])),
             placeholder=bool(stage.get("placeholder", False)),
         )
@@ -611,45 +582,45 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         for output in stage.expected_outputs:
             output_bindings = {
                 str(key): str(value)
-                for key, value in output.get("bindings", {}).items()
+                for key, value in output.get("keys", {}).items()
             }
-            if output_bindings and not set(dict(stage.bindings)).issubset(output_bindings.items()):
+            if output_bindings and not set(dict(stage.keys)).issubset(output_bindings.items()):
                 continue
-            invocation_bindings = output_bindings or dict(stage.bindings)
+            invocation_keys = output_bindings or dict(stage.keys)
             invocation_expected = [
                 output_item
                 for output_item in stage.expected_outputs
                 if {
                     str(key): str(value)
-                    for key, value in output_item.get("bindings", {}).items()
-                } == invocation_bindings
+                    for key, value in output_item.get("keys", {}).items()
+                } == invocation_keys
             ]
             signature = (
-                tuple(sorted(invocation_bindings.items())),
+                tuple(sorted(invocation_keys.items())),
                 tuple(str(item.get("path", "")) for item in invocation_expected),
             )
             if signature in seen_signatures:
                 continue
             seen_signatures.add(signature)
-            invocations.append((invocation_bindings, invocation_expected))
+            invocations.append((invocation_keys, invocation_expected))
 
         if not invocations:
-            invocations.append((dict(stage.bindings), list(stage.expected_outputs)))
+            invocations.append((dict(stage.keys), list(stage.expected_outputs)))
 
-        for invocation_bindings, invocation_expected in invocations:
+        for invocation_keys, invocation_expected in invocations:
             if stage.mode == "whole_run":
                 call_lines.append(
-                    f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={invocation_bindings!r}, expected_outputs={invocation_expected!r})"
+                    f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, keys={invocation_keys!r}, expected_outputs={invocation_expected!r})"
                 )
                 call_lines.append(f"    stage_{stage_mod_name}.run_whole(ctx)")
                 continue
 
             items_artifact = stage.inputs[0] if stage.inputs else "items.jsonl"
             call_lines.append(
-                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={invocation_bindings!r}, expected_outputs={invocation_expected!r})"
+                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, keys={invocation_keys!r}, expected_outputs={invocation_expected!r})"
             )
             call_lines.append(
-                f"    for item in iter_items_deterministic(ctx, items_artifact={items_artifact!r}, bindings=ctx.bindings):"
+                f"    for item in iter_items_deterministic(ctx, items_artifact={items_artifact!r}, keys=ctx.keys):"
             )
             call_lines.append("        item_id = item['item_id']")
             call_lines.append("        append_item_state_row({")

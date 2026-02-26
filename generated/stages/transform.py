@@ -21,7 +21,8 @@ def run_item(ctx: StageContext, item: dict[str, Any]) -> ItemResult:
     item_id = item.get('item_id', '')
     try:
         impl.run_item(ctx, item)
-        ctx.validate_outputs(STAGE_ID, OUTPUTS)
+        outputs_to_validate = [str(item.get('path', '')) for item in (ctx.expected_outputs or []) if item.get('path')] or OUTPUTS
+        ctx.validate_outputs(STAGE_ID, outputs_to_validate)
         return ItemResult(item_id=str(item_id), ok=True)
     except Exception as exc:
         return ItemResult(
