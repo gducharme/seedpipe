@@ -76,12 +76,16 @@ class CompilePipelineTests(unittest.TestCase):
             "pass1_pre/de/paragraphs.jsonl",
             "pass1_pre/ar/paragraphs.jsonl",
         ])
-        self.assertEqual(stages[1]["id"], "translate_pass2__fr")
-        self.assertEqual(stages[1]["inputs"], ["paragraphs.jsonl", "pass1_pre/fr/paragraphs.jsonl"])
-        self.assertEqual(stages[2]["id"], "translate_pass2__de")
-        self.assertEqual(stages[2]["inputs"], ["paragraphs.jsonl", "pass1_pre/de/paragraphs.jsonl"])
-        self.assertEqual(stages[3]["id"], "translate_pass2__ar")
-        self.assertEqual(stages[3]["inputs"], ["paragraphs.jsonl", "pass1_pre/ar/paragraphs.jsonl"])
+        self.assertEqual(stages[1]["id"], "translate_pass2")
+        self.assertEqual(
+            stages[1]["inputs"],
+            [
+                "paragraphs.jsonl",
+                "pass1_pre/fr/paragraphs.jsonl",
+                "pass1_pre/de/paragraphs.jsonl",
+                "pass1_pre/ar/paragraphs.jsonl",
+            ],
+        )
 
     def test_normalize_pipeline_rejects_input_pattern_template_variable_not_in_scope(self) -> None:
         raw = {
@@ -274,8 +278,7 @@ stages: []
                 },
             ],
         )
-        self.assertEqual(normalized["stages"][1]["inputs"], ["out/fr.json"])
-        self.assertEqual(normalized["stages"][2]["inputs"], ["out/de.json"])
+        self.assertEqual(normalized["stages"][1]["inputs"], ["out/fr.json", "out/de.json"])
 
     def test_normalize_pipeline_uses_internal_keys_metadata_not_bindings(self) -> None:
         raw = {
@@ -295,7 +298,7 @@ stages: []
         normalized = normalize_pipeline(raw)
 
         stage = normalized["stages"][0]
-        self.assertEqual(stage["_keys"], {"lang": "fr"})
+        self.assertEqual(stage["_keys"], {})
         self.assertNotIn("_bindings", stage)
 
     def test_validate_pipeline_structure_rejects_forward_references(self) -> None:
@@ -727,13 +730,13 @@ stages: []
             )
 
             flow_text = (output_dir / "flow.py").read_text()
-            self.assertIn("keys={'lang': 'fr'}", flow_text)
+            self.assertIn("keys={}", flow_text)
             self.assertIn("iter_items_deterministic(ctx, items_artifact='items.jsonl', keys=ctx.keys)", flow_text)
-            self.assertIn("expected_outputs=[{'pattern': 'translated/{lang}.jsonl', 'path': 'translated/fr.jsonl', 'keys': {'lang': 'fr'}}]", flow_text)
+            self.assertIn("translated/fr.jsonl", flow_text)
 
             ir = json.loads((output_dir / "ir.json").read_text())
-            translate_stage = next(stage for stage in ir["stages"] if stage["stage_id"] == "translate__fr")
-            self.assertEqual(translate_stage["keys"], [["lang", "fr"]])
+            translate_stage = next(stage for stage in ir["stages"] if stage["stage_id"] == "translate")
+            self.assertEqual(translate_stage["keys"], [])
             self.assertEqual(
                 translate_stage["expected_outputs"],
                 [
