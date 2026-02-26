@@ -115,10 +115,10 @@ Use `--force` to overwrite an existing scaffold.
 
 ## Simple pipeline example
 
-The scaffold command writes this starter pipeline:
+The scaffold command currently writes this starter pipeline:
 
 ```yaml
-pipeline_id: example-pipeline
+pipeline_id: phase1-default
 item_unit: item
 determinism_policy: strict
 stages:
@@ -133,12 +133,84 @@ stages:
       - items.jsonl
     outputs:
       - transformed.jsonl
-  - id: publish
+  - id: validate
     mode: whole_run
     inputs:
       - transformed.jsonl
     outputs:
-      - manifest.json
+      - validation_report.json
+  - id: future_review
+    mode: whole_run
+    placeholder: true
+    inputs:
+      - validation_report.json
+    outputs:
+      - reviewed_report.json
+  - id: publish
+    mode: whole_run
+    inputs:
+      - reviewed_report.json
+    outputs:
+      - published_manifest.json
+```
+
+## More full-featured pipeline example
+
+This example combines stage fan-out (`foreach`/`key`), family outputs and inputs (`family` + `pattern`), per-item and whole-run stages, schema validation, and a placeholder handoff stage:
+
+```yaml
+pipeline_id: localization-release
+item_unit: paragraph
+determinism_policy: strict
+params:
+  targets:
+    languages: [fr, de, es]
+stages:
+  - id: ingest_source
+    mode: whole_run
+    outputs:
+      - items.jsonl
+
+  - id: draft_translation
+    foreach: params.targets.languages
+    key: lang
+    mode: per_item
+    inputs:
+      - items.jsonl
+    outputs:
+      - family: pass1_translations
+        pattern: pass1_pre/{lang}/paragraphs.jsonl
+        schema: paragraphs.schema.json
+
+  - id: qa_pass
+    foreach: params.targets.languages
+    key: lang
+    mode: whole_run
+    inputs:
+      - family: pass1_translations
+        pattern: pass1_pre/{lang}/paragraphs.jsonl
+        schema: paragraphs.schema.json
+    outputs:
+      - family: qa_reports
+        pattern: qa/{lang}/report.json
+        schema: qa-report.schema.json
+
+  - id: legal_review
+    mode: whole_run
+    placeholder: true
+    inputs:
+      - qa/fr/report.json
+      - qa/de/report.json
+      - qa/es/report.json
+    outputs:
+      - approved_release.json
+
+  - id: publish
+    mode: whole_run
+    inputs:
+      - approved_release.json
+    outputs:
+      - published_manifest.json
 ```
 
 ## `pipeline.yaml` reference and design guidance
