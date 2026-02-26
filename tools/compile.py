@@ -339,7 +339,7 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
                 raise CompileError(f"pipeline.stages[{idx}] contains non-string artifact in inputs/outputs")
 
         unresolved = [artifact for artifact in stage_inputs if artifact not in produced_so_far]
-        if unresolved:
+        if unresolved and not placeholder:
             unresolved_joined = ", ".join(unresolved)
             raise CompileError(
                 f"pipeline.stages[{idx}] has forward/unresolved inputs: {unresolved_joined}; "

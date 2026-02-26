@@ -51,7 +51,7 @@ No branching, no retries, no parallelism. Just an ordered list of stages.
   Artifact names produced by this stage.
 
 - `placeholder` *(bool, optional; default `false`)*
-  When `true`, the stage is a documented no-op placeholder. It validates declared inputs/outputs but does not execute any implementation code.
+  When `true`, the stage is a documented no-op placeholder. It bypasses forward-input dependency checks and does not execute any implementation code.
 
 #### Minimal validation rules
 1. `stages` must be non-empty and **ordered** as written.
