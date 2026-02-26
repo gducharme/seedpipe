@@ -193,17 +193,17 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                 bind = entry.get("bind")
                 if not isinstance(family, str) or not isinstance(bind, str):
                     raise CompileError(
-                        f"pipeline.stages[{idx}].inputs[{input_idx}] family refs require string 'family' and 'bind'"
+                        f"pipeline.stages[{idx}] (id='{stage_id}').inputs[{input_idx}] family refs require string 'family' and 'bind'"
                     )
                 if bind not in binding:
                     raise CompileError(
-                        f"pipeline.stages[{idx}].inputs[{input_idx}] bind variable '{bind}' not in stage scope"
+                        f"pipeline.stages[{idx}] (id='{stage_id}').inputs[{input_idx}] bind variable '{bind}' not in stage scope"
                     )
                 key = str(binding[bind])
                 family_map = family_outputs.get(family, {})
                 if key not in family_map:
                     raise CompileError(
-                        f"pipeline.stages[{idx}].inputs[{input_idx}] unresolved family reference: {family}[{key}]"
+                        f"pipeline.stages[{idx}] (id='{stage_id}').inputs[{input_idx}] unresolved family reference: {family}[{key}]"
                     )
                 concrete_inputs.append(family_map[key])
 
