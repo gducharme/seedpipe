@@ -251,6 +251,7 @@ stages: []
                 {
                     "id": "ingest",
                     "mode": "whole_run",
+                    "placeholder": False,
                     "inputs": [],
                     "outputs": ["items.jsonl"],
                 },
@@ -259,6 +260,31 @@ stages: []
 
         with self.assertRaises(CompileError):
             validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_allows_placeholder_forward_references(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "stages": [
+                {
+                    "id": "ingest",
+                    "mode": "whole_run",
+                    "placeholder": False,
+                    "inputs": [],
+                    "outputs": ["items.jsonl"],
+                },
+                {
+                    "id": "future_step",
+                    "mode": "whole_run",
+                    "placeholder": True,
+                    "inputs": ["future/items_enriched.jsonl"],
+                    "outputs": ["future/items_reviewed.jsonl"],
+                },
+            ],
+        }
+
+        validate_pipeline_structure(normalized)
 
     def test_build_ir_captures_artifact_producers(self) -> None:
         pipeline = {

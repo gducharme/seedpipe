@@ -188,7 +188,7 @@ Each stage entry supports:
 - `placeholder` *(boolean, optional, default: `false`)*
   - Marks a stage as planned/no-op implementation.
   - Compiler skips importing user stage code for placeholder stages.
-  - Input/output validation still applies, so placeholders should be used carefully.
+  - Placeholder stages skip forward-input dependency checks so they can reference planned artifacts not yet produced upstream.
 
 ### Optional DSL expansion (`foreach`, `family`, `bind`, `pattern`)
 

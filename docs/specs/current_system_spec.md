@@ -49,7 +49,7 @@ README defines the expected `pipeline.yaml` model:
   - Object entries in `inputs` with `family` + `bind` for keyed artifact resolution.
   - Object entries in `outputs` with `family` + `pattern` and keying by `bind` or output-level `foreach` + `as`.
   - `{var}` template interpolation in string `inputs`/`outputs` from stage/output scope.
-- Rule after expansion: stage inputs must be produced by prior stages (no forward references).
+- Rule after expansion: non-placeholder stage inputs must be produced by prior stages (no forward references for executable stages).
 
 ### 1.5 Compile and run usage expectations
 - Compile consumes pipeline + contracts and emits generated code/metadata.
@@ -204,7 +204,7 @@ The compile tests assert:
 - pipeline normalization defaults are applied.
 - DSL normalization expands stage/output fan-out and family/bind references into concrete artifacts.
 - DSL error cases are rejected (unresolved family binds, invalid foreach/as wiring, out-of-scope bind variables, missing template variables, and family key conflicts).
-- forward input references are rejected.
+- forward input references are rejected for non-placeholder stages and allowed for placeholder stages.
 - IR includes correct artifact producer mapping.
 - compilation emits expected generated files and report mappings.
 - placeholder stage compilation behavior is supported.
