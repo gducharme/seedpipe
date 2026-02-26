@@ -200,8 +200,9 @@ class CompilePipelineTests(unittest.TestCase):
             placeholder_wrapper = (output_dir / "stages" / "future_review.py").read_text()
             self.assertIn("def run_whole", placeholder_wrapper)
             self.assertNotIn("from seedpipe.src.stages import future_review as impl", placeholder_wrapper)
-            self.assertIn("ctx.validate_inputs", placeholder_wrapper)
-            self.assertIn("ctx.validate_outputs", placeholder_wrapper)
+            self.assertNotIn("ctx.validate_inputs", placeholder_wrapper)
+            self.assertNotIn("ctx.validate_outputs", placeholder_wrapper)
+            self.assertIn("pass", placeholder_wrapper)
 
     def test_compile_pipeline_bootstraps_src_stage_impls(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

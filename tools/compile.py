@@ -318,8 +318,6 @@ def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
     wrapper_name = mode_fn
     mode_signature = "ctx: StageContext" if stage.mode == "whole_run" else "ctx: StageContext, item: dict[str, Any]"
     mode_call = "impl.run_whole(ctx)" if stage.mode == "whole_run" else "impl.run_item(ctx, item)"
-    if stage.placeholder:
-        mode_call = "None"
     item_result_return = (
         "    item_id = item.get('item_id', '')\n"
         "    try:\n"
@@ -333,9 +331,17 @@ def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
         "            error={'code': 'stage_exception', 'message': str(exc)},\n"
         "        )\n"
     )
-    whole_return = (
-        f"    {mode_call}\n"
-        "    ctx.validate_outputs(STAGE_ID, OUTPUTS)\n"
+    whole_return = f"    {mode_call}\n" "    ctx.validate_outputs(STAGE_ID, OUTPUTS)\n"
+    function_body = (
+        "    pass\n"
+        if stage.placeholder and stage.mode == "whole_run"
+        else (
+            "    item_id = item.get('item_id', '')\n"
+            "    return ItemResult(item_id=str(item_id), ok=True)\n"
+            if stage.placeholder and stage.mode == "per_item"
+            else "    ctx.validate_inputs(STAGE_ID, INPUTS)\n"
+            + (whole_return if stage.mode == "whole_run" else item_result_return)
+        )
     )
     return (
         generated_banner(meta)
@@ -354,8 +360,7 @@ def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
         + f"OUTPUTS = {python_string_list(stage.outputs)}\n\n"
         + f"def {wrapper_name}({mode_signature})"
         + (" -> None:\n" if stage.mode == "whole_run" else " -> ItemResult:\n")
-        + "    ctx.validate_inputs(STAGE_ID, INPUTS)\n"
-        + (whole_return if stage.mode == "whole_run" else item_result_return)
+        + function_body
     )
 
 
