@@ -38,13 +38,18 @@ README defines the expected `pipeline.yaml` model:
   - `item_unit` (default `item`)
   - `determinism_policy` (`strict` or `best_effort`, default `strict`)
   - `stages` ordered array (at least one stage)
-- Per-stage:
+- Per-stage (core linear model):
   - `id` (required)
   - `mode` (`whole_run` or `per_item`, default `whole_run`)
   - `inputs` (default `[]`)
   - `outputs` (default `[]`)
   - `placeholder` (default `false`)
-- Rule: stage inputs must be produced by prior stages (no forward references).
+- Optional DSL expansion accepted by compiler normalization:
+  - Stage-level `foreach` + `as` fan-out into concrete stage instances.
+  - Object entries in `inputs` with `family` + `bind` for keyed artifact resolution.
+  - Object entries in `outputs` with `family` + `pattern` and keying by `bind` or output-level `foreach` + `as`.
+  - `{var}` template interpolation in string `inputs`/`outputs` from stage/output scope.
+- Rule after expansion: stage inputs must be produced by prior stages (no forward references).
 
 ### 1.5 Compile and run usage expectations
 - Compile consumes pipeline + contracts and emits generated code/metadata.
@@ -91,6 +96,7 @@ Compilation fails when:
 - Non-array inputs/outputs.
 - Non-string artifact names.
 - Any stage input is unresolved at that point in stage order.
+- Invalid DSL expansion requests (e.g., unresolved `foreach` paths, unresolved family bindings, out-of-scope bind vars, or family key conflicts).
 - Contracts directory has no schema files or misses required schemas.
 - Resolved artifact schema name is absent from contract set.
 
@@ -196,6 +202,8 @@ Scaffold writes:
 ## 4.1 `tests/test_compile.py` coverage
 The compile tests assert:
 - pipeline normalization defaults are applied.
+- DSL normalization expands stage/output fan-out and family/bind references into concrete artifacts.
+- DSL error cases are rejected (unresolved family binds, invalid foreach/as wiring, out-of-scope bind variables, missing template variables, and family key conflicts).
 - forward input references are rejected.
 - IR includes correct artifact producer mapping.
 - compilation emits expected generated files and report mappings.
