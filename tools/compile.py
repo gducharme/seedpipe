@@ -601,15 +601,47 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
     call_lines = []
     for stage in ir.stages:
         stage_mod_name = re.sub(r"[^a-zA-Z0-9_]", "_", stage.stage_id)
-        if stage.mode == "whole_run":
-            call_lines.append(
-                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={dict(stage.bindings)!r}, expected_outputs={list(stage.expected_outputs)!r})"
+        invocations: list[tuple[dict[str, str], list[dict[str, Any]]]] = []
+        seen_signatures: set[tuple[tuple[tuple[str, str], ...], tuple[str, ...]]] = set()
+        for output in stage.expected_outputs:
+            output_bindings = {
+                str(key): str(value)
+                for key, value in output.get("bindings", {}).items()
+            }
+            if output_bindings and not set(dict(stage.bindings)).issubset(output_bindings.items()):
+                continue
+            invocation_bindings = output_bindings or dict(stage.bindings)
+            invocation_expected = [
+                output_item
+                for output_item in stage.expected_outputs
+                if {
+                    str(key): str(value)
+                    for key, value in output_item.get("bindings", {}).items()
+                } == invocation_bindings
+            ]
+            signature = (
+                tuple(sorted(invocation_bindings.items())),
+                tuple(str(item.get("path", "")) for item in invocation_expected),
             )
-            call_lines.append(f"    stage_{stage_mod_name}.run_whole(ctx)")
-        else:
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+            invocations.append((invocation_bindings, invocation_expected))
+
+        if not invocations:
+            invocations.append((dict(stage.bindings), list(stage.expected_outputs)))
+
+        for invocation_bindings, invocation_expected in invocations:
+            if stage.mode == "whole_run":
+                call_lines.append(
+                    f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={invocation_bindings!r}, expected_outputs={invocation_expected!r})"
+                )
+                call_lines.append(f"    stage_{stage_mod_name}.run_whole(ctx)")
+                continue
+
             items_artifact = stage.inputs[0] if stage.inputs else "items.jsonl"
             call_lines.append(
-                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={dict(stage.bindings)!r}, expected_outputs={list(stage.expected_outputs)!r})"
+                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={invocation_bindings!r}, expected_outputs={invocation_expected!r})"
             )
             call_lines.append(
                 f"    for item in iter_items_deterministic(ctx, items_artifact={items_artifact!r}, bindings=ctx.bindings):"
