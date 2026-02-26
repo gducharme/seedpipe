@@ -496,6 +496,7 @@ def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
     validate_outputs_call = (
         "    outputs_to_validate = [str(item.get('path', '')) for item in (ctx.expected_outputs or []) if item.get('path')] or OUTPUTS\n"
         "    ctx.validate_outputs(STAGE_ID, outputs_to_validate)\n"
+        "    ctx.validate_expected_outputs(STAGE_ID)\n"
     )
     item_result_return = (
         "    item_id = item.get('item_id', '')\n"
@@ -503,6 +504,7 @@ def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
         f"        {mode_call}\n"
         "        outputs_to_validate = [str(item.get('path', '')) for item in (ctx.expected_outputs or []) if item.get('path')] or OUTPUTS\n"
         "        ctx.validate_outputs(STAGE_ID, outputs_to_validate)\n"
+        "        ctx.validate_expected_outputs(STAGE_ID)\n"
         "        return ItemResult(item_id=str(item_id), ok=True)\n"
         "    except Exception as exc:\n"
         "        return ItemResult(\n"
@@ -642,7 +644,8 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         generated_banner(meta)
         + "from __future__ import annotations\n\n"
         + "import argparse\n"
-        + "from datetime import datetime, timezone\n\n"
+        + "from datetime import datetime, timezone\n"
+        + "from pathlib import Path\n\n"
         + imports
         + "\n\n"
         + "from seedpipe.runtime.ctx import StageContext\n"
@@ -656,6 +659,7 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         + "    return datetime.now(timezone.utc).isoformat()\n\n"
         + "def run(run_config: dict[str, object], attempt: int = 1) -> int:\n"
         + "    run_id = str(run_config['run_id'])\n"
+        + "    run_config.setdefault('_pipe_root', str(Path(__file__).resolve().parents[1]))\n"
         + "    ctx_base = StageContext.make_base(run_config=run_config)\n"
         + "\n".join(call_lines)
         + "\n    return 0\n\n"

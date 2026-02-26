@@ -119,9 +119,11 @@ It also ensures source stage stubs exist under `src/stages/*.py` for non-placeho
 - `whole_run` stages:
   - validate declared inputs before executing user impl.
   - validate declared outputs after execution.
+  - validate declared output schemas after execution when `schema` is provided.
 - `per_item` stages:
   - iterate deterministic item stream.
   - append item-state transitions (`in_progress`, then `succeeded`/`failed`).
+  - validate declared output schemas after each item execution when `schema` is provided.
   - stage exception returns an error-bearing `ItemResult` instead of raising.
 - Placeholder stages skip user imports; behavior is no-op success pattern by mode.
 
@@ -166,6 +168,7 @@ Scaffold writes:
 - `agents.markdown` (agent usage guidance)
 - `spec/phase1/pipeline.yaml`
 - `spec/phase1/contracts/*.schema.json`
+- `spec/stages/<stage_id>/*.schema.json` (runtime output schema enforcement defaults)
 - `artifacts/inputs/.gitkeep`
 - `artifacts/outputs/.gitignore`
 - `src/__init__.py`
@@ -187,6 +190,7 @@ Scaffold writes:
 - `make_base` validates non-empty string `run_id`.
 - `for_stage` creates stage-scoped derived context.
 - `validate_inputs` and `validate_outputs` enforce file existence for declared artifacts.
+- `validate_expected_outputs` enforces output schemas declared in stage `outputs` object entries (`schema` key), resolving schema files from `spec/stages/<stage_id>/<schema_name>`.
 - `resolve_artifact` resolves relative paths against run directory.
 
 ## 3.2 Deterministic item iteration (`seedpipe.runtime.items`)

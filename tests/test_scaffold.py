@@ -18,6 +18,10 @@ class ScaffoldTests(unittest.TestCase):
             self.assertTrue((root / "spec/phase1/pipeline.yaml").exists())
             self.assertTrue((root / "agents.markdown").exists())
             self.assertTrue((root / "spec/phase1/contracts/manifest.schema.json").exists())
+            self.assertTrue((root / "spec/stages/ingest/items_row.schema.json").exists())
+            self.assertTrue((root / "spec/stages/transform/transformed_row.schema.json").exists())
+            self.assertTrue((root / "spec/stages/future_review/reviewed_row.schema.json").exists())
+            self.assertTrue((root / "spec/stages/publish/manifest.schema.json").exists())
             self.assertTrue((root / "agents-readme.markdown").exists())
             self.assertTrue((root / "artifacts/inputs/.gitkeep").exists())
             outputs_gitignore = root / "artifacts/outputs/.gitignore"
