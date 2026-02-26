@@ -49,6 +49,7 @@ README defines the expected `pipeline.yaml` model:
   - Object entries in `inputs` with `family` + `pattern` + `schema` for template-based artifact resolution.
   - Object entries in `outputs` with `family` + `pattern` + `schema` and keying by `key` or output-level `foreach` + `key`.
   - `{var}` template interpolation in string `inputs`/`outputs` from stage/output scope.
+  - Compiler expansion tracks resolved family selection values as stage/output `keys` metadata (not `bind` fields), and these keys are propagated into generated runtime stage contexts.
 - Rule after expansion: non-placeholder stage inputs must be produced by prior stages (no forward references for executable stages).
 
 ### 1.5 Compile and run usage expectations
@@ -97,6 +98,7 @@ Compilation fails when:
 - Non-string artifact names.
 - Any stage input is unresolved at that point in stage order.
 - Invalid DSL expansion requests (e.g., unresolved `foreach` paths, missing required object fields, out-of-scope key vars, or missing template variables).
+- Compiler/runtime generation path is key-only for stage/output fan-out metadata (`keys`), with no `_bindings` metadata emitted in normalized stages, IR, or generated flow artifacts.
 - Contracts directory has no schema files or misses required schemas.
 - Resolved artifact schema name is absent from contract set.
 

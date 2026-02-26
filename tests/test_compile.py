@@ -277,6 +277,27 @@ stages: []
         self.assertEqual(normalized["stages"][1]["inputs"], ["out/fr.json"])
         self.assertEqual(normalized["stages"][2]["inputs"], ["out/de.json"])
 
+    def test_normalize_pipeline_uses_internal_keys_metadata_not_bindings(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "params": {"targets": {"languages": ["fr"]}},
+            "stages": [
+                {
+                    "id": "translate",
+                    "foreach": "params.targets.languages",
+                    "key": "lang",
+                    "inputs": ["items.jsonl"],
+                    "outputs": ["translated/{lang}.jsonl"],
+                }
+            ],
+        }
+
+        normalized = normalize_pipeline(raw)
+
+        stage = normalized["stages"][0]
+        self.assertEqual(stage["_keys"], {"lang": "fr"})
+        self.assertNotIn("_bindings", stage)
+
     def test_validate_pipeline_structure_rejects_forward_references(self) -> None:
         normalized = {
             "pipeline_id": "p1",
@@ -594,6 +615,64 @@ stages: []
             flow_text = (output_dir / "flow.py").read_text()
             self.assertIn("items_artifact='paragraphs.jsonl'", flow_text)
 
+
+    def test_compile_pipeline_does_not_emit_binding_metadata_in_ir_or_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pipeline_path = root / "pipeline.yaml"
+            contracts_dir = root / "contracts"
+            output_dir = root / "generated"
+            contracts_dir.mkdir()
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "phase1-keys-no-bindings",
+                        "item_unit": "item",
+                        "determinism_policy": "strict",
+                        "params": {"targets": {"languages": ["fr"]}},
+                        "stages": [
+                            {
+                                "id": "ingest",
+                                "mode": "whole_run",
+                                "inputs": [],
+                                "outputs": ["items.jsonl"],
+                            },
+                            {
+                                "id": "translate",
+                                "mode": "per_item",
+                                "foreach": "params.targets.languages",
+                                "key": "lang",
+                                "inputs": ["items.jsonl"],
+                                "outputs": ["translated/{lang}.jsonl"],
+                            },
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=output_dir,
+                )
+            )
+
+            flow_text = (output_dir / "flow.py").read_text()
+            self.assertNotIn("_bindings", flow_text)
+
+            ir_text = (output_dir / "ir.json").read_text()
+            self.assertNotIn("_bindings", ir_text)
 
     def test_compile_pipeline_emits_stage_keys_to_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
