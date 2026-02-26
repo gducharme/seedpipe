@@ -382,8 +382,11 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
             call_lines.append(f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt)")
             call_lines.append(f"    stage_{stage_mod_name}.run_whole(ctx)")
         else:
+            items_artifact = stage.inputs[0] if stage.inputs else "items.jsonl"
             call_lines.append(f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt)")
-            call_lines.append("    for item in iter_items_deterministic(ctx, items_artifact='items.jsonl'):")
+            call_lines.append(
+                f"    for item in iter_items_deterministic(ctx, items_artifact={items_artifact!r}):"
+            )
             call_lines.append("        item_id = item['item_id']")
             call_lines.append("        append_item_state_row({")
             call_lines.append("            'run_id': run_id,")
