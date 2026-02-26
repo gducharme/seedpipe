@@ -211,6 +211,34 @@ Supported forms:
 - Family inputs:
   - In `inputs`, an object entry with `family` + `bind` resolves to the concrete artifact path previously registered for that family key.
 
+- Minimal two-stage example (produce then consume by family key):
+
+```yaml
+pipeline_id: translation-pipeline
+params:
+  targets:
+    languages: [fr, de]
+stages:
+  - id: produce_pass1
+    outputs:
+      - family: pass1_translations
+        foreach: params.targets.languages
+        as: lang
+        pattern: pass1_pre/{lang}/paragraphs.jsonl
+
+  - id: consume_pass1
+    foreach: params.targets.languages
+    as: lang
+    inputs:
+      - paragraphs.jsonl
+      - family: pass1_translations
+        bind: lang
+    outputs:
+      - pass2_pre/{lang}/paragraphs.jsonl
+```
+
+In this example, `produce_pass1` registers a family mapping like `pass1_translations[fr] -> pass1_pre/fr/paragraphs.jsonl`. Then each expanded `consume_pass1__<lang>` stage resolves its family input by binding `lang` to the matching key.
+
 - Templating:
   - String `inputs` and `outputs` may include `{var}` placeholders resolved from stage/output scope variables.
 
