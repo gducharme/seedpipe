@@ -11,8 +11,15 @@
   "pipeline_id": "phase1-default",
   "stages": [
     {
-      "bindings": [],
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "items.jsonl",
+          "pattern": "items.jsonl"
+        }
+      ],
       "inputs": [],
+      "keys": [],
       "mode": "whole_run",
       "outputs": [
         "items.jsonl"
@@ -21,10 +28,17 @@
       "stage_id": "ingest"
     },
     {
-      "bindings": [],
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "transformed.jsonl",
+          "pattern": "transformed.jsonl"
+        }
+      ],
       "inputs": [
         "items.jsonl"
       ],
+      "keys": [],
       "mode": "per_item",
       "outputs": [
         "transformed.jsonl"
@@ -33,10 +47,17 @@
       "stage_id": "transform"
     },
     {
-      "bindings": [],
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "validation_report.json",
+          "pattern": "validation_report.json"
+        }
+      ],
       "inputs": [
         "transformed.jsonl"
       ],
+      "keys": [],
       "mode": "whole_run",
       "outputs": [
         "validation_report.json"
@@ -45,10 +66,17 @@
       "stage_id": "validate"
     },
     {
-      "bindings": [],
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "reviewed_report.json",
+          "pattern": "reviewed_report.json"
+        }
+      ],
       "inputs": [
         "validation_report.json"
       ],
+      "keys": [],
       "mode": "whole_run",
       "outputs": [
         "reviewed_report.json"
@@ -57,10 +85,17 @@
       "stage_id": "future_review"
     },
     {
-      "bindings": [],
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "published_manifest.json",
+          "pattern": "published_manifest.json"
+        }
+      ],
       "inputs": [
         "reviewed_report.json"
       ],
+      "keys": [],
       "mode": "whole_run",
       "outputs": [
         "published_manifest.json"
