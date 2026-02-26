@@ -123,15 +123,6 @@ def _render_template(value: str, scope: dict[str, Any]) -> str:
     return re.sub(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}", _replace, value)
 
 
-def _safe_stage_suffix(value: Any) -> str:
-    token = re.sub(r"[^a-zA-Z0-9_]", "_", str(value)).strip("_")
-    if not token:
-        token = "key"
-    if token[0].isdigit():
-        token = f"k_{token}"
-    return token
-
-
 def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
     expanded = dict(raw)
     source_stages = expanded.get("stages", [])
@@ -164,24 +155,18 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                 raise CompileError(f"pipeline.stages[{idx}].key must be a non-empty string when foreach is set")
             stage_key_scopes = [{stage_key: value} for value in values]
 
+        instance = dict(stage)
+        instance["_keys"] = {}
+        instance.pop("foreach", None)
+        instance.pop("key", None)
+
+        inputs_raw = instance.get("inputs", [])
+        outputs_raw = instance.get("outputs", [])
+        if not isinstance(inputs_raw, list) or not isinstance(outputs_raw, list):
+            raise CompileError(f"pipeline.stages[{idx}].inputs/outputs must be arrays")
+
+        concrete_inputs: list[str] = []
         for key_scope in stage_key_scopes:
-            instance = dict(stage)
-            instance["_keys"] = {
-                key: str(value)
-                for key, value in key_scope.items()
-            }
-            if stage_foreach is not None:
-                suffix = _safe_stage_suffix(key_scope[stage_key])
-                instance["id"] = f"{stage_id}__{suffix}"
-            instance.pop("foreach", None)
-            instance.pop("key", None)
-
-            inputs_raw = instance.get("inputs", [])
-            outputs_raw = instance.get("outputs", [])
-            if not isinstance(inputs_raw, list) or not isinstance(outputs_raw, list):
-                raise CompileError(f"pipeline.stages[{idx}].inputs/outputs must be arrays")
-
-            concrete_inputs: list[str] = []
             for input_idx, entry in enumerate(inputs_raw):
                 if isinstance(entry, str):
                     concrete_inputs.append(_render_template(entry, key_scope))
@@ -198,8 +183,9 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                 _ = family, schema
                 concrete_inputs.append(_render_template(pattern, key_scope))
 
-            concrete_outputs: list[str] = []
-            expected_outputs: list[dict[str, Any]] = []
+        concrete_outputs: list[str] = []
+        expected_outputs: list[dict[str, Any]] = []
+        for key_scope in stage_key_scopes:
             for output_idx, entry in enumerate(outputs_raw):
                 if isinstance(entry, str):
                     concrete_path = _render_template(entry, key_scope)
@@ -261,10 +247,10 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                         }
                     )
 
-            instance["inputs"] = concrete_inputs
-            instance["outputs"] = concrete_outputs
-            instance["_expected_outputs"] = expected_outputs
-            concrete_stages.append(instance)
+        instance["inputs"] = list(dict.fromkeys(concrete_inputs))
+        instance["outputs"] = list(dict.fromkeys(concrete_outputs))
+        instance["_expected_outputs"] = expected_outputs
+        concrete_stages.append(instance)
 
     expanded["stages"] = concrete_stages
     return expanded

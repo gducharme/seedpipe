@@ -45,11 +45,12 @@ README defines the expected `pipeline.yaml` model:
   - `outputs` (default `[]`)
   - `placeholder` (default `false`)
 - Optional DSL expansion accepted by compiler normalization:
-  - Stage-level `foreach` + `key` fan-out into concrete stage instances.
+  - Stage-level `foreach` + `key` expands stage I/O templates across all parameter values while keeping a single concrete stage ID (no stage-module duplication).
   - Object entries in `inputs` with `family` + `pattern` + `schema` for template-based artifact resolution.
   - Object entries in `outputs` with `family` + `pattern` + `schema` and keying by `key` or output-level `foreach` + `key`.
   - `{var}` template interpolation in string `inputs`/`outputs` from stage/output scope.
   - Compiler expansion tracks resolved family selection values as stage/output `keys` metadata (not `bind` fields), and these keys are propagated into generated runtime stage contexts.
+- For stage-level `foreach`, compiler now composes one stage with unioned concrete input/output artifact paths and per-output `keys` metadata so runtime invocations remain parameter-aware without generating one Python wrapper per parameter value.
 - Rule after expansion: non-placeholder stage inputs must be produced by prior stages (no forward references for executable stages).
 
 ### 1.5 Compile and run usage expectations
