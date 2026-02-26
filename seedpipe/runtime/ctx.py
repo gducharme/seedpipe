@@ -12,6 +12,7 @@ class StageContext:
     stage_id: str | None = None
     attempt: int = 1
     run_dir: Path = Path(".")
+    bindings: dict[str, str] | None = None
 
     @classmethod
     def make_base(cls, run_config: dict[str, Any], run_dir: Path | None = None) -> "StageContext":
@@ -20,13 +21,19 @@ class StageContext:
             raise ValueError("run_config must include a non-empty string run_id")
         return cls(run_config=dict(run_config), run_id=run_id, run_dir=run_dir or Path.cwd())
 
-    def for_stage(self, stage_id: str, attempt: int = 1) -> "StageContext":
+    def for_stage(
+        self,
+        stage_id: str,
+        attempt: int = 1,
+        bindings: dict[str, str] | None = None,
+    ) -> "StageContext":
         return StageContext(
             run_config=self.run_config,
             run_id=self.run_id,
             stage_id=stage_id,
             attempt=attempt,
             run_dir=self.run_dir,
+            bindings=dict(bindings or {}),
         )
 
     def validate_inputs(self, stage_id: str, inputs: list[str]) -> None:
