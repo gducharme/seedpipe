@@ -16,6 +16,4 @@ INPUTS = ['validation_report.json']
 OUTPUTS = ['reviewed_report.json']
 
 def run_whole(ctx: StageContext) -> None:
-    ctx.validate_inputs(STAGE_ID, INPUTS)
-    None
-    ctx.validate_outputs(STAGE_ID, OUTPUTS)
+    pass

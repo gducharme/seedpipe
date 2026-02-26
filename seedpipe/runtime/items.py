@@ -7,7 +7,12 @@ from typing import Any
 from .ctx import StageContext
 
 
-def iter_items_deterministic(ctx: StageContext, items_artifact: str = "items.jsonl") -> Iterator[dict[str, Any]]:
+def iter_items_deterministic(
+    ctx: StageContext,
+    items_artifact: str = "items.jsonl",
+    bindings: dict[str, str] | None = None,
+) -> Iterator[dict[str, Any]]:
+    _ = bindings
     path = ctx.resolve_artifact(items_artifact)
     if not path.exists():
         raise FileNotFoundError(f"items artifact not found: {path}")

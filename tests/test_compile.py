@@ -554,6 +554,67 @@ stages: []
             self.assertIn("items_artifact='paragraphs.jsonl'", flow_text)
 
 
+    def test_compile_pipeline_emits_stage_bindings_to_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pipeline_path = root / "pipeline.yaml"
+            contracts_dir = root / "contracts"
+            output_dir = root / "generated"
+            contracts_dir.mkdir()
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "phase1-bindings",
+                        "item_unit": "item",
+                        "determinism_policy": "strict",
+                        "params": {"targets": {"languages": ["fr"]}},
+                        "stages": [
+                            {
+                                "id": "ingest",
+                                "mode": "whole_run",
+                                "inputs": [],
+                                "outputs": ["items.jsonl"],
+                            },
+                            {
+                                "id": "translate",
+                                "mode": "per_item",
+                                "foreach": "params.targets.languages",
+                                "as": "lang",
+                                "inputs": ["items.jsonl"],
+                                "outputs": ["translated/{lang}.jsonl"],
+                            },
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=output_dir,
+                )
+            )
+
+            flow_text = (output_dir / "flow.py").read_text()
+            self.assertIn("bindings={'lang': 'fr'}", flow_text)
+            self.assertIn("iter_items_deterministic(ctx, items_artifact='items.jsonl', bindings=ctx.bindings)", flow_text)
+
+            ir = json.loads((output_dir / "ir.json").read_text())
+            translate_stage = next(stage for stage in ir["stages"] if stage["stage_id"] == "translate__fr")
+            self.assertEqual(translate_stage["bindings"], [["lang", "fr"]])
+
+
 
 if __name__ == "__main__":
     unittest.main()

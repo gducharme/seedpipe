@@ -31,6 +31,7 @@ class StageIR:
     mode: Literal["whole_run", "per_item"]
     inputs: tuple[str, ...]
     outputs: tuple[str, ...]
+    bindings: tuple[tuple[str, str], ...]
     placeholder: bool
 
 
@@ -165,6 +166,10 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
 
         for binding in stage_bindings:
             instance = dict(stage)
+            instance["_bindings"] = {
+                key: str(value)
+                for key, value in binding.items()
+            }
             if stage_foreach is not None:
                 suffix = _safe_stage_suffix(binding[stage_as])
                 instance["id"] = f"{stage_id}__{suffix}"
@@ -358,6 +363,7 @@ def build_ir(pipeline: dict[str, Any]) -> PipelineIR:
             mode=stage["mode"],
             inputs=tuple(stage["inputs"]),
             outputs=tuple(stage["outputs"]),
+            bindings=tuple(sorted((str(k), str(v)) for k, v in stage.get("_bindings", {}).items())),
             placeholder=bool(stage.get("placeholder", False)),
         )
         stages.append(stage_ir)
@@ -575,13 +581,17 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
     for stage in ir.stages:
         stage_mod_name = re.sub(r"[^a-zA-Z0-9_]", "_", stage.stage_id)
         if stage.mode == "whole_run":
-            call_lines.append(f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt)")
+            call_lines.append(
+                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={dict(stage.bindings)!r})"
+            )
             call_lines.append(f"    stage_{stage_mod_name}.run_whole(ctx)")
         else:
             items_artifact = stage.inputs[0] if stage.inputs else "items.jsonl"
-            call_lines.append(f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt)")
             call_lines.append(
-                f"    for item in iter_items_deterministic(ctx, items_artifact={items_artifact!r}):"
+                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={dict(stage.bindings)!r})"
+            )
+            call_lines.append(
+                f"    for item in iter_items_deterministic(ctx, items_artifact={items_artifact!r}, bindings=ctx.bindings):"
             )
             call_lines.append("        item_id = item['item_id']")
             call_lines.append("        append_item_state_row({")
