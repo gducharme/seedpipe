@@ -153,7 +153,7 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
         stage_foreach = stage.get("foreach")
         stage_key = stage.get("key")
 
-        stage_bindings: list[dict[str, Any]] = [{}]
+        stage_key_scopes: list[dict[str, Any]] = [{}]
         if stage_foreach is not None:
             if not isinstance(stage_foreach, str):
                 raise CompileError(f"pipeline.stages[{idx}].foreach must be a string expression")
@@ -162,16 +162,16 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                 raise CompileError(f"pipeline.stages[{idx}].foreach must resolve to a list")
             if not isinstance(stage_key, str) or not stage_key:
                 raise CompileError(f"pipeline.stages[{idx}].key must be a non-empty string when foreach is set")
-            stage_bindings = [{stage_key: value} for value in values]
+            stage_key_scopes = [{stage_key: value} for value in values]
 
-        for binding in stage_bindings:
+        for key_scope in stage_key_scopes:
             instance = dict(stage)
-            instance["_bindings"] = {
+            instance["_keys"] = {
                 key: str(value)
-                for key, value in binding.items()
+                for key, value in key_scope.items()
             }
             if stage_foreach is not None:
-                suffix = _safe_stage_suffix(binding[stage_key])
+                suffix = _safe_stage_suffix(key_scope[stage_key])
                 instance["id"] = f"{stage_id}__{suffix}"
             instance.pop("foreach", None)
             instance.pop("key", None)
@@ -184,7 +184,7 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
             concrete_inputs: list[str] = []
             for input_idx, entry in enumerate(inputs_raw):
                 if isinstance(entry, str):
-                    concrete_inputs.append(_render_template(entry, binding))
+                    concrete_inputs.append(_render_template(entry, key_scope))
                     continue
                 if not isinstance(entry, dict):
                     raise CompileError(f"pipeline.stages[{idx}].inputs[{input_idx}] must be a string or object")
@@ -196,19 +196,19 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                         f"pipeline.stages[{idx}] (id='{stage_id}').inputs[{input_idx}] object entries require string 'family', 'pattern', and 'schema'"
                     )
                 _ = family, schema
-                concrete_inputs.append(_render_template(pattern, binding))
+                concrete_inputs.append(_render_template(pattern, key_scope))
 
             concrete_outputs: list[str] = []
             expected_outputs: list[dict[str, Any]] = []
             for output_idx, entry in enumerate(outputs_raw):
                 if isinstance(entry, str):
-                    concrete_path = _render_template(entry, binding)
+                    concrete_path = _render_template(entry, key_scope)
                     concrete_outputs.append(concrete_path)
                     expected_outputs.append(
                         {
                             "pattern": entry,
                             "path": concrete_path,
-                            "keys": dict(sorted((str(k), str(v)) for k, v in binding.items())),
+                            "keys": dict(sorted((str(k), str(v)) for k, v in key_scope.items())),
                         }
                     )
                     continue
@@ -226,7 +226,7 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                 out_foreach = entry.get("foreach")
                 out_key = entry.get("key")
 
-                output_bindings: list[dict[str, Any]] = [dict(binding)]
+                output_key_scopes: list[dict[str, Any]] = [dict(key_scope)]
                 if out_foreach is not None:
                     if not isinstance(out_foreach, str):
                         raise CompileError(
@@ -241,15 +241,15 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                         raise CompileError(
                             f"pipeline.stages[{idx}].outputs[{output_idx}].key must be a non-empty string"
                         )
-                    output_bindings = [
+                    output_key_scopes = [
                         {
-                            **binding,
+                            **key_scope,
                             out_key: value,
                         }
                         for value in values
                     ]
-                for out_binding in output_bindings:
-                    path = _render_template(pattern, out_binding)
+                for output_key_scope in output_key_scopes:
+                    path = _render_template(pattern, output_key_scope)
                     concrete_outputs.append(path)
                     expected_outputs.append(
                         {
@@ -257,7 +257,7 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                             "pattern": pattern,
                             "schema": schema,
                             "path": path,
-                            "keys": dict(sorted((str(k), str(v)) for k, v in out_binding.items())),
+                            "keys": dict(sorted((str(k), str(v)) for k, v in output_key_scope.items())),
                         }
                     )
 
@@ -354,7 +354,7 @@ def build_ir(pipeline: dict[str, Any]) -> PipelineIR:
             mode=stage["mode"],
             inputs=tuple(stage["inputs"]),
             outputs=tuple(stage["outputs"]),
-            keys=tuple(sorted((str(k), str(v)) for k, v in stage.get("_bindings", {}).items())),
+            keys=tuple(sorted((str(k), str(v)) for k, v in stage.get("_keys", {}).items())),
             expected_outputs=tuple(stage.get("_expected_outputs", [])),
             placeholder=bool(stage.get("placeholder", False)),
         )
@@ -580,13 +580,13 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         invocations: list[tuple[dict[str, str], list[dict[str, Any]]]] = []
         seen_signatures: set[tuple[tuple[tuple[str, str], ...], tuple[str, ...]]] = set()
         for output in stage.expected_outputs:
-            output_bindings = {
+            output_keys = {
                 str(key): str(value)
                 for key, value in output.get("keys", {}).items()
             }
-            if output_bindings and not set(dict(stage.keys)).issubset(output_bindings.items()):
+            if output_keys and not set(dict(stage.keys)).issubset(output_keys.items()):
                 continue
-            invocation_keys = output_bindings or dict(stage.keys)
+            invocation_keys = output_keys or dict(stage.keys)
             invocation_expected = [
                 output_item
                 for output_item in stage.expected_outputs
