@@ -29,10 +29,10 @@ def now_rfc3339() -> str:
 def run(run_config: dict[str, object], attempt: int = 1) -> int:
     run_id = str(run_config['run_id'])
     ctx_base = StageContext.make_base(run_config=run_config)
-    ctx = ctx_base.for_stage('ingest', attempt=attempt)
+    ctx = ctx_base.for_stage('ingest', attempt=attempt, bindings={})
     stage_ingest.run_whole(ctx)
-    ctx = ctx_base.for_stage('transform', attempt=attempt)
-    for item in iter_items_deterministic(ctx, items_artifact='items.jsonl'):
+    ctx = ctx_base.for_stage('transform', attempt=attempt, bindings={})
+    for item in iter_items_deterministic(ctx, items_artifact='items.jsonl', bindings=ctx.bindings):
         item_id = item['item_id']
         append_item_state_row({
             'run_id': run_id,
@@ -62,11 +62,11 @@ def run(run_config: dict[str, object], attempt: int = 1) -> int:
                 'error': res.error,
                 'updated_at': now_rfc3339(),
             })
-    ctx = ctx_base.for_stage('validate', attempt=attempt)
+    ctx = ctx_base.for_stage('validate', attempt=attempt, bindings={})
     stage_validate.run_whole(ctx)
-    ctx = ctx_base.for_stage('future_review', attempt=attempt)
+    ctx = ctx_base.for_stage('future_review', attempt=attempt, bindings={})
     stage_future_review.run_whole(ctx)
-    ctx = ctx_base.for_stage('publish', attempt=attempt)
+    ctx = ctx_base.for_stage('publish', attempt=attempt, bindings={})
     stage_publish.run_whole(ctx)
     return 0
 

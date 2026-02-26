@@ -11,6 +11,7 @@
   "pipeline_id": "phase1-default",
   "stages": [
     {
+      "bindings": [],
       "inputs": [],
       "mode": "whole_run",
       "outputs": [
@@ -20,6 +21,7 @@
       "stage_id": "ingest"
     },
     {
+      "bindings": [],
       "inputs": [
         "items.jsonl"
       ],
@@ -31,6 +33,7 @@
       "stage_id": "transform"
     },
     {
+      "bindings": [],
       "inputs": [
         "transformed.jsonl"
       ],
@@ -42,6 +45,7 @@
       "stage_id": "validate"
     },
     {
+      "bindings": [],
       "inputs": [
         "validation_report.json"
       ],
@@ -53,6 +57,7 @@
       "stage_id": "future_review"
     },
     {
+      "bindings": [],
       "inputs": [
         "reviewed_report.json"
       ],
