@@ -733,6 +733,10 @@ stages: []
             self.assertIn("keys={}", flow_text)
             self.assertIn("iter_items_deterministic(ctx, items_artifact='items.jsonl', keys=ctx.keys)", flow_text)
             self.assertIn("translated/fr.jsonl", flow_text)
+            self.assertIn("run_config.setdefault('_pipe_root'", flow_text)
+
+            stage_wrapper = (output_dir / "stages" / "translate.py").read_text()
+            self.assertIn("ctx.validate_expected_outputs(STAGE_ID)", stage_wrapper)
 
             ir = json.loads((output_dir / "ir.json").read_text())
             translate_stage = next(stage for stage in ir["stages"] if stage["stage_id"] == "translate")
