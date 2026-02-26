@@ -75,7 +75,25 @@ def load_pipeline(path: Path) -> dict[str, Any]:
     try:
         import yaml  # type: ignore
 
-        data = yaml.safe_load(text)
+        class _UniqueKeyLoader(yaml.SafeLoader):
+            pass
+
+        def _construct_mapping(loader: Any, node: Any, deep: bool = False) -> dict[str, Any]:
+            loader.flatten_mapping(node)
+            mapping: dict[str, Any] = {}
+            for key_node, value_node in node.value:
+                key = loader.construct_object(key_node, deep=deep)
+                if key in mapping:
+                    raise CompileError(f"duplicate key in pipeline YAML: {key}")
+                mapping[key] = loader.construct_object(value_node, deep=deep)
+            return mapping
+
+        _UniqueKeyLoader.add_constructor(  # type: ignore[attr-defined]
+            yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+            _construct_mapping,
+        )
+
+        data = yaml.load(text, Loader=_UniqueKeyLoader)
     except ModuleNotFoundError:
         data = json.loads(text)
     if not isinstance(data, dict):

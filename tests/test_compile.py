@@ -99,6 +99,22 @@ class CompilePipelineTests(unittest.TestCase):
         with self.assertRaises(CompileError):
             normalize_pipeline(raw)
 
+    def test_load_pipeline_rejects_duplicate_top_level_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pipeline_path = Path(tmpdir) / "pipeline.yaml"
+            pipeline_path.write_text(
+                """
+pipeline_id: p1
+stages: []
+stages: []
+""".strip()
+            )
+
+            with self.assertRaisesRegex(CompileError, "duplicate key in pipeline YAML: stages"):
+                from tools.compile import load_pipeline
+
+                load_pipeline(pipeline_path)
+
     def test_normalize_pipeline_rejects_stage_foreach_non_string_expression(self) -> None:
         raw = {
             "pipeline_id": "p1",
