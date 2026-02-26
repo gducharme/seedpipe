@@ -10,9 +10,9 @@ from .ctx import StageContext
 def iter_items_deterministic(
     ctx: StageContext,
     items_artifact: str = "items.jsonl",
-    bindings: dict[str, str] | None = None,
+    keys: dict[str, str] | None = None,
 ) -> Iterator[dict[str, Any]]:
-    _ = bindings
+    _ = keys
     path = ctx.resolve_artifact(items_artifact)
     if not path.exists():
         raise FileNotFoundError(f"items artifact not found: {path}")

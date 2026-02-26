@@ -190,26 +190,26 @@ Each stage entry supports:
   - Compiler skips importing user stage code for placeholder stages.
   - Placeholder stages skip forward-input dependency checks so they can reference planned artifacts not yet produced upstream.
 
-### Optional DSL expansion (`foreach`, `family`, `bind`, `pattern`)
+### Optional DSL expansion (`foreach`, `key`, `family`, `pattern`, `schema`)
 
 The compiler can also expand a higher-level DSL into the same linear stage model used by runtime wrappers.
 
 Supported forms:
 
 - Stage fan-out:
-  - `foreach: <dot.path.to.list>` with `as: <var>` at stage level creates one concrete stage per value.
+  - `foreach: <dot.path.to.list>` with `key: <var>` at stage level creates one concrete stage per value.
   - Concrete stage IDs are suffixed as `<id>__<value>` (sanitized for module-safe names).
 
 - Family outputs:
   - In `outputs`, an object entry can declare a keyed family artifact:
     - `family`: family name
     - `pattern`: templated concrete path (for example `pass1_pre/{lang}/paragraphs.jsonl`)
-    - key source via either:
-      - `bind: <var>` (uses current scope variable), or
-      - `foreach` + `as` inside the output object (fan-out inside a single stage)
+    - optional key source via either:
+      - `key: <var>` (uses current scope variable), or
+      - `foreach` + `key` inside the output object (fan-out inside a single stage)
 
 - Family inputs:
-  - In `inputs`, an object entry with `family` + `bind` resolves to the concrete artifact path previously registered for that family key.
+  - In `inputs`/`outputs`, object entries consistently use `family`, `pattern`, and `schema`; the concrete path is rendered from `pattern` using the current key scope.
 
 - Minimal two-stage example (produce then consume by family key):
 
@@ -223,29 +223,31 @@ stages:
     outputs:
       - family: pass1_translations
         foreach: params.targets.languages
-        as: lang
+        key: lang
         pattern: pass1_pre/{lang}/paragraphs.jsonl
+        schema: paragraphs.schema.json
 
   - id: consume_pass1
     foreach: params.targets.languages
-    as: lang
+    key: lang
     inputs:
       - paragraphs.jsonl
       - family: pass1_translations
-        bind: lang
+        pattern: pass1_pre/{lang}/paragraphs.jsonl
+        schema: paragraphs.schema.json
     outputs:
       - pass2_pre/{lang}/paragraphs.jsonl
 ```
 
-In this example, `produce_pass1` registers a family mapping like `pass1_translations[fr] -> pass1_pre/fr/paragraphs.jsonl`. Then each expanded `consume_pass1__<lang>` stage resolves its family input by binding `lang` to the matching key.
+In this example, both stages use the same `pattern` template, and `key: lang` drives deterministic `{lang}` interpolation for concrete artifact paths.
 
 - Templating:
   - String `inputs` and `outputs` may include `{var}` placeholders resolved from stage/output scope variables.
 
-- Runtime stage context bindings:
-  - Generated flow passes resolved stage `bindings` into `StageContext`.
-  - Generated flow also passes `expected_outputs`: a per-output list containing the original `pattern`, concrete `path`, and the `bindings` used to render that path.
-  - This gives stage/runtime code an explicit link between output template patterns and concrete binding values.
+- Runtime stage context keys:
+  - Generated flow passes resolved stage `keys` into `StageContext`.
+  - Generated flow also passes `expected_outputs`: a per-output list containing the original `pattern`, concrete `path`, and the `keys` used to render that path.
+  - This gives stage/runtime code an explicit link between output template patterns and concrete key values.
 
 The expanded result is still validated using normal Phase-1 rules (`inputs`/`outputs` become plain string arrays before validation and code generation).
 

@@ -45,9 +45,9 @@ README defines the expected `pipeline.yaml` model:
   - `outputs` (default `[]`)
   - `placeholder` (default `false`)
 - Optional DSL expansion accepted by compiler normalization:
-  - Stage-level `foreach` + `as` fan-out into concrete stage instances.
-  - Object entries in `inputs` with `family` + `bind` for keyed artifact resolution.
-  - Object entries in `outputs` with `family` + `pattern` and keying by `bind` or output-level `foreach` + `as`.
+  - Stage-level `foreach` + `key` fan-out into concrete stage instances.
+  - Object entries in `inputs` with `family` + `pattern` + `schema` for template-based artifact resolution.
+  - Object entries in `outputs` with `family` + `pattern` + `schema` and keying by `key` or output-level `foreach` + `key`.
   - `{var}` template interpolation in string `inputs`/`outputs` from stage/output scope.
 - Rule after expansion: non-placeholder stage inputs must be produced by prior stages (no forward references for executable stages).
 
@@ -96,7 +96,7 @@ Compilation fails when:
 - Non-array inputs/outputs.
 - Non-string artifact names.
 - Any stage input is unresolved at that point in stage order.
-- Invalid DSL expansion requests (e.g., unresolved `foreach` paths, unresolved family bindings, out-of-scope bind vars, or family key conflicts).
+- Invalid DSL expansion requests (e.g., unresolved `foreach` paths, missing required object fields, out-of-scope key vars, or missing template variables).
 - Contracts directory has no schema files or misses required schemas.
 - Resolved artifact schema name is absent from contract set.
 
@@ -202,8 +202,8 @@ Scaffold writes:
 ## 4.1 `tests/test_compile.py` coverage
 The compile tests assert:
 - pipeline normalization defaults are applied.
-- DSL normalization expands stage/output fan-out and family/bind references into concrete artifacts.
-- DSL error cases are rejected (unresolved family binds, invalid foreach/as wiring, out-of-scope bind variables, missing template variables, and family key conflicts).
+- DSL normalization expands stage/output fan-out and family/pattern object references into concrete artifacts.
+- DSL error cases are rejected (invalid foreach/key wiring, missing required object fields, out-of-scope key variables, and missing template variables).
 - forward input references are rejected for non-placeholder stages and allowed for placeholder stages.
 - IR includes correct artifact producer mapping.
 - compilation emits expected generated files and report mappings.
