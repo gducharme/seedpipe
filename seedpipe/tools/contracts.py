@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from seedpipe.tools.types import ArtifactKind
+
 
 @dataclass(frozen=True)
 class ValidationIssue:
@@ -124,7 +126,7 @@ def load_schema_store(contracts_dir: Path) -> tuple[dict[str, dict[str, Any]], d
     return schemas, mapping
 
 
-def resolve_contract(artifact_name: str, mapping: dict[str, dict[str, str]], schema_version: str) -> tuple[str, str] | None:
+def resolve_contract(artifact_name: str, mapping: dict[str, dict[str, str]], schema_version: str) -> tuple[ArtifactKind, str] | None:
     if artifact_name in mapping:
         cfg = mapping[artifact_name]
         kind = cfg.get("kind", "")

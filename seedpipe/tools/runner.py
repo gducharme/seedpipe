@@ -8,12 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from seedpipe.tools.types import Manifest
+
 
 @dataclass(frozen=True)
 class RunResult:
     workdir: Path
     manifest_path: Path
-    manifest: dict[str, Any]
+    manifest: Manifest
 
 
 def run_fixture_once(fixture_dir: Path, run_label: str, env_overrides: dict[str, str] | None = None, workdir: Path | None = None) -> RunResult:
@@ -32,7 +34,10 @@ def run_fixture_once(fixture_dir: Path, run_label: str, env_overrides: dict[str,
     manifest_path = workdir / "manifest.json"
     if not manifest_path.exists():
         raise RuntimeError("fixture run did not produce manifest.json")
-    return RunResult(workdir=workdir, manifest_path=manifest_path, manifest=json.loads(manifest_path.read_text()))
+    manifest_payload: Any = json.loads(manifest_path.read_text())
+    if not isinstance(manifest_payload, dict):
+        raise RuntimeError("fixture manifest must be a JSON object")
+    return RunResult(workdir=workdir, manifest_path=manifest_path, manifest=manifest_payload)
 
 
 def run_fixture_allow_failure(
