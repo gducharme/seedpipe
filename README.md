@@ -100,6 +100,7 @@ This creates:
 - `agents-readme.markdown` (copy of this repository README for agent context)
 - `spec/phase1/pipeline.yaml`
 - `spec/phase1/contracts/*.schema.json`
+- `spec/stages/<stage_id>/*.schema.json` (default runtime-enforced stage output schemas)
 - `artifacts/inputs/.gitkeep`
 - `artifacts/outputs/.gitkeep`
 - starter stage implementations in `src/stages/*.py`
@@ -249,6 +250,12 @@ In this example, both stages use the same `pattern` template, and `key: lang` dr
   - Generated flow also passes `expected_outputs`: a per-output list containing the original `pattern`, concrete `path`, and the `keys` used to render that path.
   - This gives stage/runtime code an explicit link between output template patterns and concrete key values.
 
+- Schema enforcement via `schema` key:
+  - When an output is declared with `schema`, runtime validates the produced artifact after stage execution.
+  - `.jsonl` outputs are validated row-by-row; `.json` outputs are validated as a single document.
+  - By default, stage schema files should live at `spec/stages/<stage_id>/<schema>`.
+  - Example: stage `source_ingest` output with `schema: paragraphs.schema.json` resolves to `spec/stages/source_ingest/paragraphs.schema.json`.
+
 The expanded result is still validated using normal Phase-1 rules (`inputs`/`outputs` become plain string arrays before validation and code generation).
 
 ### Artifact wiring rules (important)
@@ -268,6 +275,7 @@ The expanded result is still validated using normal Phase-1 rules (`inputs`/`out
   - validate stage inputs before execution,
   - call your stage implementation (`src/stages/*.py`) unless placeholder,
   - validate stage outputs after execution.
+  - enforce any declared output `schema` files from `spec/stages/<stage_id>/`.
 
 ### Best practices when creating/generating pipelines
 
