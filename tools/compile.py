@@ -32,6 +32,7 @@ class StageIR:
     inputs: tuple[str, ...]
     outputs: tuple[str, ...]
     bindings: tuple[tuple[str, str], ...]
+    expected_outputs: tuple[dict[str, Any], ...]
     placeholder: bool
 
 
@@ -207,9 +208,18 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                 concrete_inputs.append(family_map[key])
 
             concrete_outputs: list[str] = []
+            expected_outputs: list[dict[str, Any]] = []
             for output_idx, entry in enumerate(outputs_raw):
                 if isinstance(entry, str):
-                    concrete_outputs.append(_render_template(entry, binding))
+                    concrete_path = _render_template(entry, binding)
+                    concrete_outputs.append(concrete_path)
+                    expected_outputs.append(
+                        {
+                            "pattern": entry,
+                            "path": concrete_path,
+                            "bindings": dict(sorted((str(k), str(v)) for k, v in binding.items())),
+                        }
+                    )
                     continue
                 if not isinstance(entry, dict):
                     raise CompileError(f"pipeline.stages[{idx}].outputs[{output_idx}] must be a string or object")
@@ -270,9 +280,19 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                         )
                     family_map[key] = path
                     concrete_outputs.append(path)
+                    expected_outputs.append(
+                        {
+                            "family": family,
+                            "pattern": pattern,
+                            "bind": bind_var,
+                            "path": path,
+                            "bindings": dict(sorted((str(k), str(v)) for k, v in out_binding.items())),
+                        }
+                    )
 
             instance["inputs"] = concrete_inputs
             instance["outputs"] = concrete_outputs
+            instance["_expected_outputs"] = expected_outputs
             concrete_stages.append(instance)
 
     expanded["stages"] = concrete_stages
@@ -364,6 +384,7 @@ def build_ir(pipeline: dict[str, Any]) -> PipelineIR:
             inputs=tuple(stage["inputs"]),
             outputs=tuple(stage["outputs"]),
             bindings=tuple(sorted((str(k), str(v)) for k, v in stage.get("_bindings", {}).items())),
+            expected_outputs=tuple(stage.get("_expected_outputs", [])),
             placeholder=bool(stage.get("placeholder", False)),
         )
         stages.append(stage_ir)
@@ -582,13 +603,13 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         stage_mod_name = re.sub(r"[^a-zA-Z0-9_]", "_", stage.stage_id)
         if stage.mode == "whole_run":
             call_lines.append(
-                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={dict(stage.bindings)!r})"
+                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={dict(stage.bindings)!r}, expected_outputs={list(stage.expected_outputs)!r})"
             )
             call_lines.append(f"    stage_{stage_mod_name}.run_whole(ctx)")
         else:
             items_artifact = stage.inputs[0] if stage.inputs else "items.jsonl"
             call_lines.append(
-                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={dict(stage.bindings)!r})"
+                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, bindings={dict(stage.bindings)!r}, expected_outputs={list(stage.expected_outputs)!r})"
             )
             call_lines.append(
                 f"    for item in iter_items_deterministic(ctx, items_artifact={items_artifact!r}, bindings=ctx.bindings):"

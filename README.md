@@ -214,6 +214,11 @@ Supported forms:
 - Templating:
   - String `inputs` and `outputs` may include `{var}` placeholders resolved from stage/output scope variables.
 
+- Runtime stage context bindings:
+  - Generated flow passes resolved stage `bindings` into `StageContext`.
+  - Generated flow also passes `expected_outputs`: a per-output list containing the original `pattern`, concrete `path`, and the `bindings` used to render that path.
+  - This gives stage/runtime code an explicit link between output template patterns and concrete binding values.
+
 The expanded result is still validated using normal Phase-1 rules (`inputs`/`outputs` become plain string arrays before validation and code generation).
 
 ### Artifact wiring rules (important)

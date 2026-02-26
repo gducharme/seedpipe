@@ -234,8 +234,28 @@ stages: []
 
         normalized = normalize_pipeline(raw)
         self.assertEqual(normalized["stages"][0]["outputs"], ["out/fr.json", "out/de.json"])
+        self.assertEqual(
+            normalized["stages"][0]["_expected_outputs"],
+            [
+                {
+                    "family": "f",
+                    "pattern": "out/{lang}.json",
+                    "bind": "lang",
+                    "path": "out/fr.json",
+                    "bindings": {"lang": "fr"},
+                },
+                {
+                    "family": "f",
+                    "pattern": "out/{lang}.json",
+                    "bind": "lang",
+                    "path": "out/de.json",
+                    "bindings": {"lang": "de"},
+                },
+            ],
+        )
         self.assertEqual(normalized["stages"][1]["inputs"], ["out/fr.json"])
         self.assertEqual(normalized["stages"][2]["inputs"], ["out/de.json"])
+
     def test_validate_pipeline_structure_rejects_forward_references(self) -> None:
         normalized = {
             "pipeline_id": "p1",
@@ -609,10 +629,21 @@ stages: []
             flow_text = (output_dir / "flow.py").read_text()
             self.assertIn("bindings={'lang': 'fr'}", flow_text)
             self.assertIn("iter_items_deterministic(ctx, items_artifact='items.jsonl', bindings=ctx.bindings)", flow_text)
+            self.assertIn("expected_outputs=[{'pattern': 'translated/{lang}.jsonl', 'path': 'translated/fr.jsonl', 'bindings': {'lang': 'fr'}}]", flow_text)
 
             ir = json.loads((output_dir / "ir.json").read_text())
             translate_stage = next(stage for stage in ir["stages"] if stage["stage_id"] == "translate__fr")
             self.assertEqual(translate_stage["bindings"], [["lang", "fr"]])
+            self.assertEqual(
+                translate_stage["expected_outputs"],
+                [
+                    {
+                        "bindings": {"lang": "fr"},
+                        "path": "translated/fr.jsonl",
+                        "pattern": "translated/{lang}.jsonl",
+                    }
+                ],
+            )
 
 
 
