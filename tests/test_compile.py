@@ -262,6 +262,58 @@ class CompilePipelineTests(unittest.TestCase):
             self.assertIn("def run_whole", ingest_impl)
             self.assertIn("def run_item", transform_impl)
 
+    def test_compile_pipeline_per_item_uses_stage_input_as_items_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pipeline_path = root / "pipeline.yaml"
+            contracts_dir = root / "contracts"
+            output_dir = root / "generated"
+            contracts_dir.mkdir()
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "phase1-custom-item-artifact",
+                        "item_unit": "paragraph",
+                        "determinism_policy": "strict",
+                        "stages": [
+                            {
+                                "id": "source_ingest",
+                                "mode": "whole_run",
+                                "inputs": [],
+                                "outputs": ["paragraphs.jsonl", "manifest.json"],
+                            },
+                            {
+                                "id": "translate_pass1",
+                                "mode": "per_item",
+                                "inputs": ["paragraphs.jsonl"],
+                                "outputs": ["pass1_pre/paragraphs.jsonl"],
+                            },
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=output_dir,
+                )
+            )
+
+            flow_text = (output_dir / "flow.py").read_text()
+            self.assertIn("items_artifact='paragraphs.jsonl'", flow_text)
+
 
 
 if __name__ == "__main__":
