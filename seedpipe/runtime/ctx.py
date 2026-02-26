@@ -47,4 +47,4 @@ class StageContext:
             return path
         if path.parts[:2] == ("artifacts", "inputs"):
             return self.run_dir / path
-        return self.run_dir / "artifacts" / name
+        return self.run_dir / path

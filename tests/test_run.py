@@ -148,7 +148,7 @@ from pathlib import Path
 
 
 def run_whole(ctx) -> None:
-    Path('artifacts/items.jsonl').write_text('{\"item_id\": \"i-1\"}\\n')
+    Path('items.jsonl').write_text('{\"item_id\": \"i-1\"}\\n')
 """.strip()
             )
 
@@ -187,7 +187,7 @@ def run_whole(ctx: StageContext) -> None:
             )
 
             self.assertEqual(code, 0)
-            self.assertTrue((output_dir / "artifacts" / "items.jsonl").exists())
+            self.assertTrue((output_dir / "items.jsonl").exists())
 
 
 if __name__ == "__main__":
