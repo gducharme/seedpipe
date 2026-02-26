@@ -99,6 +99,23 @@ class CompilePipelineTests(unittest.TestCase):
         with self.assertRaises(CompileError):
             normalize_pipeline(raw)
 
+
+    def test_normalize_pipeline_reports_stage_id_for_invalid_family_ref_shape(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "stages": [
+                {
+                    "id": "consumer",
+                    "inputs": [{"family": "pass1_translations"}],
+                    "outputs": ["out.json"],
+                }
+            ],
+        }
+
+        with self.assertRaisesRegex(CompileError, r"pipeline\.stages\[0\] \(id='consumer'\)\.inputs\[0\]"):
+            normalize_pipeline(raw)
+
+
     def test_load_pipeline_rejects_duplicate_top_level_keys(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             pipeline_path = Path(tmpdir) / "pipeline.yaml"
