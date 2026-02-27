@@ -507,7 +507,7 @@ stages: []
             self.assertNotIn("ctx.validate_outputs", placeholder_wrapper)
             self.assertIn("pass", placeholder_wrapper)
 
-    def test_compile_pipeline_bootstraps_src_stage_impls(self) -> None:
+    def test_compile_pipeline_does_not_bootstrap_src_stage_impls(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             pipeline_path = root / "pipeline.yaml"
@@ -556,15 +556,7 @@ stages: []
                 )
             )
 
-            self.assertTrue((root / "src" / "__init__.py").exists())
-            self.assertTrue((root / "src" / "stages" / "__init__.py").exists())
-            self.assertTrue((root / "src" / "stages" / "ingest.py").exists())
-            self.assertTrue((root / "src" / "stages" / "transform.py").exists())
-
-            ingest_impl = (root / "src" / "stages" / "ingest.py").read_text()
-            transform_impl = (root / "src" / "stages" / "transform.py").read_text()
-            self.assertIn("def run_whole", ingest_impl)
-            self.assertIn("def run_item", transform_impl)
+            self.assertFalse((root / "src").exists())
 
     def test_compile_pipeline_per_item_uses_stage_input_as_items_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -752,6 +744,111 @@ stages: []
                 ],
             )
 
+    def test_compile_pipeline_whole_run_wrapper_uses_expected_output_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pipeline_path = root / "pipeline.yaml"
+            contracts_dir = root / "contracts"
+            output_dir = root / "generated"
+            contracts_dir.mkdir()
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "phase1-whole-run-expected-outputs",
+                        "item_unit": "item",
+                        "determinism_policy": "strict",
+                        "stages": [
+                            {
+                                "id": "transform",
+                                "mode": "whole_run",
+                                "inputs": [],
+                                "outputs": [
+                                    {
+                                        "family": "transformed_rewrites",
+                                        "pattern": "transforms/transformed.jsonl",
+                                        "schema": "transformed_rewrites.schema.json",
+                                    }
+                                ],
+                            },
+                            {
+                                "id": "reviewer_pass",
+                                "mode": "whole_run",
+                                "inputs": [
+                                    {
+                                        "family": "transformed_rewrites",
+                                        "pattern": "transforms/transformed.jsonl",
+                                        "schema": "transformed_rewrites.schema.json",
+                                    }
+                                ],
+                                "outputs": [
+                                    {
+                                        "family": "reviewed_rewrites",
+                                        "pattern": "review/reviewed.jsonl",
+                                        "schema": "reviewed_rewrites.schema.json",
+                                    },
+                                    {
+                                        "family": "review_summary",
+                                        "pattern": "review/review_summary.json",
+                                        "schema": "review_summary.schema.json",
+                                    },
+                                ],
+                            },
+                            {
+                                "id": "publish",
+                                "mode": "whole_run",
+                                "inputs": [
+                                    {
+                                        "family": "reviewed_rewrites",
+                                        "pattern": "review/reviewed.jsonl",
+                                        "schema": "reviewed_rewrites.schema.json",
+                                    },
+                                    {
+                                        "family": "review_summary",
+                                        "pattern": "review/review_summary.json",
+                                        "schema": "review_summary.schema.json",
+                                    },
+                                ],
+                                "outputs": [
+                                    {
+                                        "family": "manifest",
+                                        "pattern": "manifest.json",
+                                        "schema": "manifest.schema.json",
+                                    }
+                                ],
+                            },
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+                "transformed_rewrites.schema.json": {"type": "object"},
+                "reviewed_rewrites.schema.json": {"type": "object"},
+                "review_summary.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=output_dir,
+                )
+            )
+
+            publish_wrapper = (output_dir / "stages" / "publish.py").read_text()
+            self.assertIn("INPUTS = ['review/reviewed.jsonl', 'review/review_summary.json']", publish_wrapper)
+            self.assertIn(
+                "outputs_to_validate = [str(item.get('path', '')) for item in (ctx.expected_outputs or []) if item.get('path')] or OUTPUTS",
+                publish_wrapper,
+            )
+            self.assertIn("ctx.validate_expected_outputs(STAGE_ID)", publish_wrapper)
 
 
 if __name__ == "__main__":

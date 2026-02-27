@@ -21,3 +21,4 @@ def run_whole(ctx: StageContext) -> None:
     impl.run_whole(ctx)
     outputs_to_validate = [str(item.get('path', '')) for item in (ctx.expected_outputs or []) if item.get('path')] or OUTPUTS
     ctx.validate_outputs(STAGE_ID, outputs_to_validate)
+    ctx.validate_expected_outputs(STAGE_ID)

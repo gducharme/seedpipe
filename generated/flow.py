@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+from pathlib import Path
 
 from seedpipe.generated.stages import ingest as stage_ingest
 from seedpipe.generated.stages import transform as stage_transform
@@ -28,6 +29,7 @@ def now_rfc3339() -> str:
 
 def run(run_config: dict[str, object], attempt: int = 1) -> int:
     run_id = str(run_config['run_id'])
+    run_config.setdefault('_pipe_root', str(Path(__file__).resolve().parents[1]))
     ctx_base = StageContext.make_base(run_config=run_config)
     ctx = ctx_base.for_stage('ingest', attempt=attempt, keys={}, expected_outputs=[{'pattern': 'items.jsonl', 'path': 'items.jsonl', 'keys': {}}])
     stage_ingest.run_whole(ctx)
