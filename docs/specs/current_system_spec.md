@@ -113,7 +113,7 @@ Compiler emits (at minimum):
 - `generated/_meta.json`
 - optional `generated/ir.json`
 
-It also ensures source stage stubs exist under `src/stages/*.py` for non-placeholder stages.
+Compiler does not create or modify source stage implementation files (`src/stages/*.py`).
 
 ### Runtime semantics embedded in generated code
 - `whole_run` stages:
@@ -218,6 +218,7 @@ The compile tests assert:
 - missing required contracts fail compilation.
 - compile can omit IR with `emit_debug_ir=False`.
 - generated wrapper behavior validates declared outputs and imports expected stage modules.
+- generated stage wrappers (both `whole_run` and `per_item`) validate emitted output paths from runtime `expected_outputs` metadata and then enforce declared output schemas via `ctx.validate_expected_outputs(...)`.
 
 ## 4.2 `tests/test_run.py` coverage
 The run tests assert:
