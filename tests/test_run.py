@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tools.compile import CompilePaths, compile_pipeline
 from tools.run import run_generated_flow
 
 
@@ -273,6 +274,145 @@ def run_whole(ctx: StageContext) -> None:
 
             self.assertEqual(code, 0)
             self.assertTrue((output_dir / "items.jsonl").exists())
+
+    def test_run_generated_flow_looping_reruns_failed_items_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            contracts_dir = root / "contracts"
+            contracts_dir.mkdir()
+            pipeline_path = root / "pipeline.yaml"
+            inputs_dir = root / "artifacts" / "inputs"
+            inputs_dir.mkdir(parents=True)
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "looping-pipe",
+                        "item_unit": "item",
+                        "determinism_policy": "strict",
+                        "pipeline_type": "looping",
+                        "max_loops": 2,
+                        "stages": [
+                            {"id": "ingest", "mode": "whole_run", "inputs": [], "outputs": ["items.jsonl"]},
+                            {
+                                "id": "seed",
+                                "mode": "per_item",
+                                "inputs": ["items.jsonl"],
+                                "outputs": ["seed.marker"],
+                                "reentry": "retry_seed",
+                            },
+                            {
+                                "id": "work",
+                                "mode": "per_item",
+                                "inputs": ["items.jsonl"],
+                                "outputs": ["processed.jsonl"],
+                                "go_to": "retry_seed",
+                            },
+                            {
+                                "id": "publish",
+                                "mode": "whole_run",
+                                "inputs": ["processed.jsonl"],
+                                "outputs": ["manifest.json"],
+                            },
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=generated_dir,
+                )
+            )
+
+            src_stages_dir = root / "src" / "stages"
+            src_stages_dir.mkdir(parents=True)
+            (src_stages_dir / "ingest.py").write_text(
+                """
+import json
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    rows = [{"item_id": "a"}, {"item_id": "b"}]
+    Path("items.jsonl").write_text("".join(json.dumps(row) + "\\n" for row in rows))
+""".strip()
+            )
+            (src_stages_dir / "seed.py").write_text(
+                """
+from pathlib import Path
+
+
+def run_item(ctx, item):
+    with Path("seed.log").open("a", encoding="utf-8") as fh:
+        fh.write(str(item.get("item_id", "")) + "\\n")
+    Path("seed.marker").write_text("ok")
+""".strip()
+            )
+            (src_stages_dir / "work.py").write_text(
+                """
+import json
+from pathlib import Path
+from seedpipe.generated.models import ItemResult
+
+
+def run_item(ctx, item):
+    item_id = str(item.get("item_id", ""))
+    marker = Path(f".work_fail_once_{item_id}.marker")
+    if item_id == "b" and not marker.exists():
+        marker.write_text("failed-once")
+        return ItemResult(item_id=item_id, ok=False, error={"code": "business_rule_failed", "message": "retry", "source": "stage"})
+    with Path("processed.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"item_id": item_id, "ok": True}) + "\\n")
+    return ItemResult(item_id=item_id, ok=True)
+""".strip()
+            )
+            (src_stages_dir / "publish.py").write_text(
+                """
+import json
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    count = 0
+    path = Path("processed.jsonl")
+    if path.exists():
+        count = len([line for line in path.read_text().splitlines() if line.strip()])
+    Path("manifest.json").write_text(json.dumps({"count": count}))
+""".strip()
+            )
+
+            output_dir = root / "artifacts" / "outputs" / "loop-run"
+            code = run_generated_flow(
+                generated_dir=generated_dir,
+                run_id="loop-run",
+                output_dir=output_dir,
+                inputs_dir=inputs_dir,
+            )
+
+            self.assertEqual(code, 0)
+            processed_lines = [line for line in (output_dir / "processed.jsonl").read_text().splitlines() if line.strip()]
+            self.assertEqual(len(processed_lines), 2)
+            self.assertEqual({json.loads(line)["item_id"] for line in processed_lines}, {"a", "b"})
+            seed_lines = [line for line in (output_dir / "seed.log").read_text().splitlines() if line.strip()]
+            self.assertEqual(seed_lines, ["a", "b", "b"])
+            manifest = json.loads((output_dir / ".seedpipe_run_manifest.json").read_text())
+            self.assertEqual(manifest.get("loop_iteration"), 2)
+            index = manifest.get("artifact_index", {})
+            self.assertIsInstance(index, dict)
+            self.assertTrue(str(index.get("processed.jsonl", "")).startswith("work/loops/0002/"))
 
 
 if __name__ == "__main__":

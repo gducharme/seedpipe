@@ -38,6 +38,7 @@ README defines the expected `pipeline.yaml` model:
   - `item_unit` (default `item`)
   - `determinism_policy` (`strict` or `best_effort`, default `strict`)
   - `pipeline_type` (`straight` or `looping`, default `straight`)
+  - `max_loops` (integer >= 0, default `0`; must be `0` when `pipeline_type=straight`, and >=1 when `pipeline_type=looping`)
   - `stages` ordered array (at least one stage)
 - Per-stage (core linear model):
   - `id` (required)
@@ -95,6 +96,7 @@ Compilation fails when:
 - `pipeline_id` missing/empty.
 - Invalid `determinism_policy`.
 - Invalid `pipeline_type`.
+- Invalid `max_loops` value.
 - No stages.
 - Duplicate stage IDs.
 - Invalid stage mode.
@@ -104,10 +106,12 @@ Compilation fails when:
 - Non-string artifact names.
 - Any stage input is unresolved at that point in stage order.
 - `pipeline_type=looping` without any stage `reentry`.
+- `pipeline_type=looping` with `max_loops < 1`.
 - Duplicate `reentry` names.
 - `go_to` references unknown `reentry` name.
 - `go_to` does not point to an earlier stage.
 - `pipeline_type=straight` with any `reentry` or `go_to` stage field.
+- `pipeline_type=straight` with non-zero `max_loops`.
 - Invalid DSL expansion requests (e.g., unresolved `foreach` paths, missing required object fields, out-of-scope key vars, or missing template variables).
 - Compiler/runtime generation path is key-only for stage/output fan-out metadata (`keys`), with no `_bindings` metadata emitted in normalized stages, IR, or generated flow artifacts.
 - Contracts directory has no schema files or misses required schemas.
@@ -131,11 +135,17 @@ Compiler does not create or modify source stage implementation files (`src/stage
   - validate declared inputs before executing user impl.
   - validate declared outputs after execution.
   - validate declared output schemas after execution when `schema` is provided.
+  - snapshot declared outputs under `<stage_id>/loops/<NNNN>/` and update manifest artifact index for logical-to-concrete resolution.
 - `per_item` stages:
   - iterate deterministic item stream.
-  - append item-state transitions (`in_progress`, then `succeeded`/`failed`).
+  - append item-state transitions (`in_progress`, then `succeeded`/`failed`) with per-item attempt counters.
   - validate declared output schemas after each item execution when `schema` is provided.
-  - stage exception returns an error-bearing `ItemResult` instead of raising.
+  - stage exceptions and runtime validation failures are normalized into error-bearing `ItemResult` failures.
+- Loop execution behavior (`pipeline_type=looping`):
+  - failed per-item cohort at a stage with `go_to` is rerouted to the resolved reentry stage.
+  - reruns process failed items only.
+  - reroute cycles stop when cohort is empty or `max_loops` is exceeded (hard error).
+  - run manifest stores loop iteration, active item cohort, item attempts, and artifact index for deterministic resolution and resume context.
 - Placeholder stages skip user imports; behavior is no-op success pattern by mode.
 
 ## 2.3 `tools.run` executable behavior
@@ -175,6 +185,7 @@ Compiler does not create or modify source stage implementation files (`src/stage
 - CLI args:
   - `--dir` target directory (default CWD)
   - `--force` to allow overwrite
+  - `--loop` to scaffold a loop-enabled starter pipeline (`pipeline_type=looping`, `max_loops`, and `reentry`/`go_to` wiring)
 
 ### Files created
 Scaffold writes:
@@ -188,6 +199,7 @@ Scaffold writes:
 - `src/__init__.py`
 - `src/stages/__init__.py`
 - starter `src/stages/{ingest,transform,publish}.py`
+- when `--loop` is set, scaffold also seeds loop-stage starter code (`src/stages/seed.py`) and a loop-oriented `spec/phase1/pipeline.yaml`
 
 ### Write policy
 - Refuses overwrite by default (raises `FileExistsError`).
@@ -255,6 +267,7 @@ The run tests assert:
 The scaffold tests assert:
 - scaffold writes expected baseline files and output policies.
 - scaffolded project compiles successfully with `compile_pipeline`.
+- `--loop` scaffold mode emits a looping pipeline and compiles successfully.
 - README copy source follows runtime `REPO_ROOT` (patchable in test).
 - no-force overwrite protection is enforced.
 

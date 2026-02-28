@@ -22,6 +22,7 @@ class CompilePipelineTests(unittest.TestCase):
         self.assertEqual(normalized["item_unit"], "item")
         self.assertEqual(normalized["determinism_policy"], "strict")
         self.assertEqual(normalized["pipeline_type"], "straight")
+        self.assertEqual(normalized["max_loops"], 0)
         self.assertEqual(normalized["stages"][0]["inputs"], [])
         self.assertEqual(normalized["stages"][0]["mode"], "whole_run")
 
@@ -384,6 +385,48 @@ stages: []
         with self.assertRaisesRegex(CompileError, "pipeline.pipeline_type"):
             validate_pipeline_structure(normalized)
 
+    def test_validate_pipeline_structure_rejects_invalid_max_loops(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "straight",
+            "max_loops": -1,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"]},
+            ],
+        }
+        with self.assertRaisesRegex(CompileError, "pipeline.max_loops"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_straight_with_nonzero_max_loops(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "straight",
+            "max_loops": 1,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"]},
+            ],
+        }
+        with self.assertRaisesRegex(CompileError, "requires max_loops=0"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_looping_with_zero_max_loops(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "looping",
+            "max_loops": 0,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": "start"},
+            ],
+        }
+        with self.assertRaisesRegex(CompileError, "requires max_loops >= 1"):
+            validate_pipeline_structure(normalized)
+
     def test_validate_pipeline_structure_rejects_straight_with_loop_fields(self) -> None:
         normalized = {
             "pipeline_id": "p1",
@@ -404,6 +447,7 @@ stages: []
             "item_unit": "item",
             "determinism_policy": "strict",
             "pipeline_type": "looping",
+            "max_loops": 2,
             "stages": [
                 {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"]},
             ],
@@ -418,6 +462,7 @@ stages: []
             "item_unit": "item",
             "determinism_policy": "strict",
             "pipeline_type": "looping",
+            "max_loops": 2,
             "stages": [
                 {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": "start"},
                 {"id": "s2", "mode": "whole_run", "placeholder": False, "inputs": ["x.json"], "outputs": ["y.json"], "reentry": "start"},
@@ -433,6 +478,7 @@ stages: []
             "item_unit": "item",
             "determinism_policy": "strict",
             "pipeline_type": "looping",
+            "max_loops": 2,
             "stages": [
                 {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": "start"},
                 {"id": "s2", "mode": "whole_run", "placeholder": False, "inputs": ["x.json"], "outputs": ["y.json"], "go_to": "missing"},
@@ -448,6 +494,7 @@ stages: []
             "item_unit": "item",
             "determinism_policy": "strict",
             "pipeline_type": "looping",
+            "max_loops": 2,
             "stages": [
                 {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "go_to": "finish"},
                 {"id": "s2", "mode": "whole_run", "placeholder": False, "inputs": ["x.json"], "outputs": ["y.json"], "reentry": "finish"},
@@ -463,6 +510,7 @@ stages: []
             "item_unit": "item",
             "determinism_policy": "strict",
             "pipeline_type": "looping",
+            "max_loops": 2,
             "stages": [
                 {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": "start"},
                 {"id": "s2", "mode": "whole_run", "placeholder": False, "inputs": ["x.json"], "outputs": ["y.json"], "go_to": "start"},
@@ -477,6 +525,7 @@ stages: []
             "item_unit": "item",
             "determinism_policy": "strict",
             "pipeline_type": "looping",
+            "max_loops": 2,
             "stages": [
                 {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": 123},
             ],
@@ -524,6 +573,7 @@ stages: []
             "item_unit": "item",
             "determinism_policy": "strict",
             "pipeline_type": "looping",
+            "max_loops": 2,
             "stages": [
                 {"id": "s1", "mode": "whole_run", "inputs": [], "outputs": ["x.json"], "reentry": "start"},
                 {"id": "s2", "mode": "whole_run", "inputs": ["x.json"], "outputs": ["y.json"], "go_to": "start"},
@@ -596,6 +646,8 @@ stages: []
             self.assertIn("append_item_state_row", flow_text)
             self.assertIn("RUN_MANIFEST_FILE", flow_text)
             self.assertIn("_resolve_resume_index", flow_text)
+            self.assertIn("def _register_stage_outputs", flow_text)
+            self.assertIn("loops", flow_text)
 
             ingest_wrapper = (output_dir / "stages" / "ingest.py").read_text()
             self.assertIn("def run_whole", ingest_wrapper)
@@ -891,7 +943,7 @@ stages: []
 
             flow_text = (output_dir / "flow.py").read_text()
             self.assertIn("keys={}", flow_text)
-            self.assertIn("iter_items_deterministic(ctx, items_artifact='items.jsonl', keys=ctx.keys)", flow_text)
+            self.assertIn("_iter_stage_items(ctx, items_artifact='items.jsonl', keys=ctx.keys, active_item_ids=active_item_ids)", flow_text)
             self.assertIn("translated/fr.jsonl", flow_text)
             self.assertIn("run_config.setdefault('_pipe_root'", flow_text)
 
@@ -1033,6 +1085,7 @@ stages: []
                         "item_unit": "item",
                         "determinism_policy": "strict",
                         "pipeline_type": "looping",
+                        "max_loops": 2,
                         "stages": [
                             {
                                 "id": "ingest",

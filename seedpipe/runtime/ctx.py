@@ -18,6 +18,24 @@ class StageContext:
     keys: dict[str, str] | None = None
     expected_outputs: list[dict[str, Any]] | None = None
 
+    def _artifact_index(self) -> dict[str, str]:
+        raw = self.run_config.get("_artifact_index", {})
+        if not isinstance(raw, dict):
+            return {}
+        out: dict[str, str] = {}
+        for key, value in raw.items():
+            if isinstance(key, str) and isinstance(value, str):
+                out[key] = value
+        return out
+
+    def _current_output_names(self) -> set[str]:
+        names: set[str] = set()
+        for output in self.expected_outputs or []:
+            path = output.get("path")
+            if isinstance(path, str) and path:
+                names.add(path)
+        return names
+
     def _project_root(self) -> Path:
         configured = self.run_config.get("_pipe_root")
         if isinstance(configured, str) and configured.strip():
@@ -114,6 +132,16 @@ class StageContext:
         path = Path(name)
         if path.is_absolute():
             return path
+        # Current stage output checks should resolve the live in-run artifact path.
+        if name in self._current_output_names():
+            return self.run_dir / path
+        index = self._artifact_index()
+        concrete = index.get(name)
+        if isinstance(concrete, str) and concrete.strip():
+            concrete_path = Path(concrete)
+            if concrete_path.is_absolute():
+                return concrete_path
+            return self.run_dir / concrete_path
         if path.parts[:2] == ("artifacts", "inputs"):
             return self.run_dir / path
         return self.run_dir / path
