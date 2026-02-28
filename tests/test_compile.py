@@ -21,6 +21,8 @@ class CompilePipelineTests(unittest.TestCase):
 
         self.assertEqual(normalized["item_unit"], "item")
         self.assertEqual(normalized["determinism_policy"], "strict")
+        self.assertEqual(normalized["pipeline_type"], "straight")
+        self.assertEqual(normalized["max_loops"], 0)
         self.assertEqual(normalized["stages"][0]["inputs"], [])
         self.assertEqual(normalized["stages"][0]["mode"], "whole_run")
 
@@ -322,6 +324,7 @@ stages: []
             "pipeline_id": "p1",
             "item_unit": "item",
             "determinism_policy": "strict",
+            "pipeline_type": "straight",
             "stages": [
                 {
                     "id": "transform",
@@ -347,6 +350,7 @@ stages: []
             "pipeline_id": "p1",
             "item_unit": "item",
             "determinism_policy": "strict",
+            "pipeline_type": "straight",
             "stages": [
                 {
                     "id": "ingest",
@@ -367,11 +371,181 @@ stages: []
 
         validate_pipeline_structure(normalized)
 
+    def test_validate_pipeline_structure_rejects_unknown_pipeline_type(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "zigzag",
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"]},
+            ],
+        }
+
+        with self.assertRaisesRegex(CompileError, "pipeline 'p1' pipeline_type"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_invalid_max_loops(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "straight",
+            "max_loops": -1,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"]},
+            ],
+        }
+        with self.assertRaisesRegex(CompileError, "pipeline 'p1' max_loops"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_straight_with_nonzero_max_loops(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "straight",
+            "max_loops": 1,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"]},
+            ],
+        }
+        with self.assertRaisesRegex(CompileError, "requires max_loops=0"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_looping_with_zero_max_loops(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "looping",
+            "max_loops": 0,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": "start"},
+            ],
+        }
+        with self.assertRaisesRegex(CompileError, "requires max_loops >= 1"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_straight_with_loop_fields(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "straight",
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": "start"},
+            ],
+        }
+
+        with self.assertRaisesRegex(CompileError, "does not allow 'reentry' or 'go_to' stage fields"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_looping_without_reentry(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "looping",
+            "max_loops": 2,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"]},
+            ],
+        }
+
+        with self.assertRaisesRegex(CompileError, "requires at least one stage with 'reentry'"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_duplicate_reentry(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "looping",
+            "max_loops": 2,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": "start"},
+                {"id": "s2", "mode": "whole_run", "placeholder": False, "inputs": ["x.json"], "outputs": ["y.json"], "reentry": "start"},
+            ],
+        }
+
+        with self.assertRaisesRegex(CompileError, "duplicates"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_go_to_unknown_reentry(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "looping",
+            "max_loops": 2,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": "start"},
+                {"id": "s2", "mode": "whole_run", "placeholder": False, "inputs": ["x.json"], "outputs": ["y.json"], "go_to": "missing"},
+            ],
+        }
+
+        with self.assertRaisesRegex(CompileError, "unknown reentry"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_go_to_non_backward_target(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "looping",
+            "max_loops": 2,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "go_to": "finish"},
+                {"id": "s2", "mode": "whole_run", "placeholder": False, "inputs": ["x.json"], "outputs": ["y.json"], "reentry": "finish"},
+            ],
+        }
+
+        with self.assertRaisesRegex(CompileError, r"go_to='finish'.*not earlier"):
+            validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_allows_looping_with_backward_go_to(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "looping",
+            "max_loops": 2,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": "start"},
+                {"id": "s2", "mode": "whole_run", "placeholder": False, "inputs": ["x.json"], "outputs": ["y.json"], "go_to": "start"},
+            ],
+        }
+
+        validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_non_string_reentry_and_go_to(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "looping",
+            "max_loops": 2,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"], "reentry": 123},
+            ],
+        }
+        with self.assertRaisesRegex(CompileError, "reentry must be a non-empty string"):
+            validate_pipeline_structure(normalized)
+
+        normalized["stages"][0]["reentry"] = "start"
+        normalized["stages"].append(
+            {"id": "s2", "mode": "whole_run", "placeholder": False, "inputs": ["x.json"], "outputs": ["y.json"], "go_to": 42}
+        )
+        with self.assertRaisesRegex(CompileError, "go_to must be a non-empty string"):
+            validate_pipeline_structure(normalized)
+
     def test_build_ir_captures_artifact_producers(self) -> None:
         pipeline = {
             "pipeline_id": "p1",
             "item_unit": "item",
             "determinism_policy": "strict",
+            "pipeline_type": "straight",
             "stages": [
                 {"id": "ingest", "mode": "whole_run", "inputs": [], "outputs": ["items.jsonl"]},
                 {
@@ -386,9 +560,31 @@ stages: []
         ir = build_ir(pipeline)
 
         self.assertEqual(ir.pipeline_id, "p1")
+        self.assertEqual(ir.pipeline_type, "straight")
         self.assertEqual(ir.stages[1].mode, "per_item")
+        self.assertIsNone(ir.stages[0].reentry)
+        self.assertIsNone(ir.stages[0].go_to)
         self.assertEqual(ir.artifact_producers["items.jsonl"], "ingest")
         self.assertEqual(ir.artifact_producers["transformed.jsonl"], "transform")
+
+    def test_build_ir_preserves_loop_metadata(self) -> None:
+        pipeline = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "looping",
+            "max_loops": 2,
+            "stages": [
+                {"id": "s1", "mode": "whole_run", "inputs": [], "outputs": ["x.json"], "reentry": "start"},
+                {"id": "s2", "mode": "whole_run", "inputs": ["x.json"], "outputs": ["y.json"], "go_to": "start"},
+            ],
+        }
+
+        ir = build_ir(pipeline)
+        self.assertEqual(ir.pipeline_type, "looping")
+        self.assertEqual(ir.stages[0].reentry, "start")
+        self.assertIsNone(ir.stages[0].go_to)
+        self.assertEqual(ir.stages[1].go_to, "start")
 
     def test_compile_pipeline_emits_expected_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -450,6 +646,8 @@ stages: []
             self.assertIn("append_item_state_row", flow_text)
             self.assertIn("RUN_MANIFEST_FILE", flow_text)
             self.assertIn("_resolve_resume_index", flow_text)
+            self.assertIn("def _register_stage_outputs", flow_text)
+            self.assertIn("loops", flow_text)
 
             ingest_wrapper = (output_dir / "stages" / "ingest.py").read_text()
             self.assertIn("def run_whole", ingest_wrapper)
@@ -745,7 +943,7 @@ stages: []
 
             flow_text = (output_dir / "flow.py").read_text()
             self.assertIn("keys={}", flow_text)
-            self.assertIn("iter_items_deterministic(ctx, items_artifact='items.jsonl', keys=ctx.keys)", flow_text)
+            self.assertIn("_iter_stage_items(ctx, items_artifact='items.jsonl', keys=ctx.keys, active_item_ids=active_item_ids)", flow_text)
             self.assertIn("translated/fr.jsonl", flow_text)
             self.assertIn("run_config.setdefault('_pipe_root'", flow_text)
 
@@ -871,6 +1069,65 @@ stages: []
                 publish_wrapper,
             )
             self.assertIn("ctx.validate_expected_outputs(STAGE_ID)", publish_wrapper)
+
+    def test_compile_pipeline_emits_loop_metadata_to_ir_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pipeline_path = root / "pipeline.yaml"
+            contracts_dir = root / "contracts"
+            output_dir = root / "generated"
+            contracts_dir.mkdir()
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "phase1-loop-metadata",
+                        "item_unit": "item",
+                        "determinism_policy": "strict",
+                        "pipeline_type": "looping",
+                        "max_loops": 2,
+                        "stages": [
+                            {
+                                "id": "ingest",
+                                "mode": "whole_run",
+                                "inputs": [],
+                                "outputs": ["items.jsonl"],
+                                "reentry": "start",
+                            },
+                            {
+                                "id": "review",
+                                "mode": "whole_run",
+                                "inputs": ["items.jsonl"],
+                                "outputs": ["reviewed.jsonl"],
+                                "go_to": "start",
+                            },
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=output_dir,
+                )
+            )
+
+            ir = json.loads((output_dir / "ir.json").read_text())
+            self.assertEqual(ir["pipeline_type"], "looping")
+            self.assertEqual(ir["stages"][0]["reentry"], "start")
+            self.assertIsNone(ir["stages"][0]["go_to"])
+            self.assertEqual(ir["stages"][1]["go_to"], "start")
 
 
 if __name__ == "__main__":

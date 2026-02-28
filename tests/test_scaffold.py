@@ -22,6 +22,10 @@ class ScaffoldTests(unittest.TestCase):
             self.assertTrue((root / "spec/stages/transform/transformed_row.schema.json").exists())
             self.assertTrue((root / "spec/stages/future_review/reviewed_row.schema.json").exists())
             self.assertTrue((root / "spec/stages/publish/manifest.schema.json").exists())
+            agents_text = (root / "agents.markdown").read_text()
+            self.assertIn("Practical implementation notes", agents_text)
+            self.assertIn("run manifest stage order does not match compiled flow", agents_text)
+            self.assertIn("Fast debug checklist", agents_text)
             self.assertTrue((root / "agents-readme.markdown").exists())
             self.assertTrue((root / "artifacts/inputs/.gitkeep").exists())
             outputs_gitignore = root / "artifacts/outputs/.gitignore"
@@ -61,6 +65,28 @@ class ScaffoldTests(unittest.TestCase):
             scaffold_project(root)
             with self.assertRaises(FileExistsError):
                 scaffold_project(root)
+
+    def test_scaffold_loop_mode_writes_loop_pipeline_and_compiles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scaffold_project(root, loop=True)
+
+            pipeline_text = (root / "spec/phase1/pipeline.yaml").read_text()
+            self.assertIn("pipeline_type: looping", pipeline_text)
+            self.assertIn("max_loops: 3", pipeline_text)
+            self.assertTrue((root / "src" / "stages" / "seed.py").exists())
+
+            result = compile_pipeline(
+                CompilePaths(
+                    pipeline_path=root / "spec/phase1/pipeline.yaml",
+                    contracts_dir=root / "spec/phase1/contracts",
+                    output_dir=root / "generated",
+                )
+            )
+            self.assertEqual(result["pipeline_id"], "example-pipeline-loop")
+            flow_text = (root / "generated" / "flow.py").read_text()
+            self.assertIn("PIPELINE_TYPE = 'looping'", flow_text)
+            self.assertIn("MAX_LOOPS = 3", flow_text)
 
 
 if __name__ == "__main__":

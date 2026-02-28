@@ -53,6 +53,53 @@ stages:
         schema: manifest.schema.json
 """
 
+LOOP_PIPELINE_TEMPLATE = """pipeline_id: example-pipeline-loop
+item_unit: item
+determinism_policy: strict
+pipeline_type: looping
+max_loops: 3
+stages:
+  - id: ingest
+    mode: whole_run
+    inputs: []
+    outputs:
+      - family: items
+        pattern: items.jsonl
+        schema: items_row.schema.json
+  - id: seed
+    mode: per_item
+    inputs:
+      - family: items
+        pattern: items.jsonl
+        schema: items_row.schema.json
+    outputs:
+      - family: seeded
+        pattern: seeded.jsonl
+        schema: items_row.schema.json
+    reentry: retry_seed
+  - id: transform
+    mode: per_item
+    inputs:
+      - family: seeded
+        pattern: seeded.jsonl
+        schema: items_row.schema.json
+    outputs:
+      - family: transformed
+        pattern: transformed.jsonl
+        schema: transformed_row.schema.json
+    go_to: retry_seed
+  - id: publish
+    mode: whole_run
+    inputs:
+      - family: transformed
+        pattern: transformed.jsonl
+        schema: transformed_row.schema.json
+    outputs:
+      - family: manifest
+        pattern: manifest.json
+        schema: manifest.schema.json
+"""
+
 ARTIFACT_REF_SCHEMA_TEMPLATE = """{
   \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",
   \"$id\": \"seedpipe://spec/phase1/contracts/artifact_ref.schema.json\",
@@ -161,6 +208,17 @@ STAGE_ITEMS_ROW_SCHEMA_TEMPLATE = """{
 }
 """
 
+STAGE_SEEDED_ROW_SCHEMA_TEMPLATE = """{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["item_id"],
+  "properties": {
+    "item_id": { "type": "string", "minLength": 1 }
+  }
+}
+"""
+
 STAGE_TRANSFORMED_ROW_SCHEMA_TEMPLATE = """{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
@@ -210,7 +268,7 @@ def _load_agents_readme_template() -> str:
             return f"{description}\n"
     return "# Seedpipe\n\nProject README was unavailable at scaffold time.\n"
 
-TEMPLATES = {
+BASE_TEMPLATES = {
     Path("agents.markdown"): """# Seedpipe agent guide
 
 - Never edit files under `generated/`; they are compiler output and will be overwritten.
@@ -220,13 +278,39 @@ TEMPLATES = {
 - `artifacts/inputs/` should contain the artifacts required to start a run.
 - `artifacts/outputs/<run_id>/` should contain stage artifacts for that specific run ID.
 - CLI entrypoints may be unavailable until installation; use `python -m tools.scaffold|compile|run` from a checkout.
+- Use `seedpipe-scaffold --loop` to generate a loop-enabled starter pipeline with `pipeline_type: looping`, `max_loops`, and `reentry`/`go_to` stage wiring.
+
+## Practical implementation notes
+
+- After stage-order edits in `spec/phase1/pipeline.yaml`, use a new `run-id`. Reusing an old run ID can fail with `ValueError: run manifest stage order does not match compiled flow`.
+- Runtime schema validation loads declared output payloads as JSON. Declaring `.txt`, `.md`, or `.csv` outputs with schemas can fail at JSON parsing.
+- Preferred output pattern:
+  - Keep machine-contract outputs in JSON artifacts declared in `pipeline.yaml`.
+  - Write human-readable `.md` or `.csv` as side artifacts from stage code unless wrapped in JSON.
+- Side artifacts are a convenience layer; the canonical contract should stay in JSON for downstream stage consumption.
+- In loop pipelines, prefer returning `ItemResult(ok=False, error=...)` for business-rule failures in `run_item` and let runtime route failed cohorts through `go_to` reentry.
+- For narrative diagnostics, keep explicit lanes:
+  - `run_document_diagnostics` for document-level metrics.
+  - `run_paragraph_diagnostics` for paragraph-level metrics.
+  - `run_hybrid_diagnostics` for global baseline plus local anchors.
+  - Merge lanes in `merge_report` into a stable bundle contract.
+
+## Fast debug checklist
+
+- Compile failures:
+  - Confirm every object-form input/output defines `family`, `pattern`, and `schema`.
+  - Confirm schema files exist under `spec/stages/<stage_id>/...`.
+- Run failures:
+  - Confirm stage code writes every declared output artifact.
+  - Confirm produced output payload shape matches declared stage schema.
+  - Use a new `run-id` after stage-graph edits.
 """,
-    Path("spec/phase1/pipeline.yaml"): PIPELINE_TEMPLATE,
     Path("spec/phase1/contracts/artifact_ref.schema.json"): ARTIFACT_REF_SCHEMA_TEMPLATE,
     Path("spec/phase1/contracts/item_state_row.schema.json"): ITEM_STATE_SCHEMA_TEMPLATE,
     Path("spec/phase1/contracts/items_row.schema.json"): ITEMS_ROW_SCHEMA_TEMPLATE,
     Path("spec/phase1/contracts/manifest.schema.json"): MANIFEST_SCHEMA_TEMPLATE,
     Path("spec/stages/ingest/items_row.schema.json"): STAGE_ITEMS_ROW_SCHEMA_TEMPLATE,
+    Path("spec/stages/seed/items_row.schema.json"): STAGE_SEEDED_ROW_SCHEMA_TEMPLATE,
     Path("spec/stages/transform/transformed_row.schema.json"): STAGE_TRANSFORMED_ROW_SCHEMA_TEMPLATE,
     Path("spec/stages/future_review/reviewed_row.schema.json"): STAGE_REVIEWED_ROW_SCHEMA_TEMPLATE,
     Path("spec/stages/publish/manifest.schema.json"): STAGE_MANIFEST_SCHEMA_TEMPLATE,
@@ -259,6 +343,19 @@ def run_item(ctx, item: dict[str, object]) -> None:
     with output.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(transformed) + "\\n")
 """,
+    Path("src/stages/seed.py"): """from __future__ import annotations
+
+import json
+from pathlib import Path
+
+
+def run_item(ctx, item: dict[str, object]) -> None:
+    _ = ctx
+    output = Path("seeded.jsonl")
+    seeded = {"item_id": item.get("item_id", "")}
+    with output.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(seeded) + "\\n")
+""",
     Path("src/stages/publish.py"): """from __future__ import annotations
 
 import json
@@ -271,10 +368,12 @@ def run_whole(ctx) -> None:
 }
 
 
-def scaffold_project(target_dir: Path, force: bool = False) -> list[Path]:
+def scaffold_project(target_dir: Path, force: bool = False, loop: bool = False) -> list[Path]:
+    pipeline_template = LOOP_PIPELINE_TEMPLATE if loop else PIPELINE_TEMPLATE
     templates = {
         Path("agents-readme.markdown"): _load_agents_readme_template(),
-        **TEMPLATES,
+        **BASE_TEMPLATES,
+        Path("spec/phase1/pipeline.yaml"): pipeline_template,
     }
     created: list[Path] = []
     for relative_path, content in templates.items():
@@ -291,12 +390,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Scaffold a minimal Seedpipe project layout")
     parser.add_argument("--dir", type=Path, default=Path.cwd(), help="Target directory (default: current directory)")
     parser.add_argument("--force", action="store_true", help="Overwrite existing scaffold files")
+    parser.add_argument("--loop", action="store_true", help="Generate a loop-enabled starter pipeline")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    created = scaffold_project(args.dir, force=args.force)
+    created = scaffold_project(args.dir, force=args.force, loop=args.loop)
     print(f"Created {len(created)} files:")
     for path in created:
         print(path)

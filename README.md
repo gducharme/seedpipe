@@ -113,6 +113,12 @@ seedpipe-scaffold --dir /path/to/your/project
 
 Use `--force` to overwrite an existing scaffold.
 
+To scaffold a loop-enabled starter pipeline:
+
+```bash
+seedpipe-scaffold --loop
+```
+
 ## Simple pipeline example
 
 The scaffold command currently writes this starter pipeline:
@@ -154,14 +160,66 @@ stages:
       - published_manifest.json
 ```
 
+With `seedpipe-scaffold --loop`, scaffold writes:
+
+```yaml
+pipeline_id: example-pipeline-loop
+item_unit: item
+determinism_policy: strict
+pipeline_type: looping
+max_loops: 3
+stages:
+  - id: ingest
+    mode: whole_run
+    inputs: []
+    outputs:
+      - family: items
+        pattern: items.jsonl
+        schema: items_row.schema.json
+  - id: seed
+    mode: per_item
+    inputs:
+      - family: items
+        pattern: items.jsonl
+        schema: items_row.schema.json
+    outputs:
+      - family: seeded
+        pattern: seeded.jsonl
+        schema: items_row.schema.json
+    reentry: retry_seed
+  - id: transform
+    mode: per_item
+    inputs:
+      - family: seeded
+        pattern: seeded.jsonl
+        schema: items_row.schema.json
+    outputs:
+      - family: transformed
+        pattern: transformed.jsonl
+        schema: transformed_row.schema.json
+    go_to: retry_seed
+  - id: publish
+    mode: whole_run
+    inputs:
+      - family: transformed
+        pattern: transformed.jsonl
+        schema: transformed_row.schema.json
+    outputs:
+      - family: manifest
+        pattern: manifest.json
+        schema: manifest.schema.json
+```
+
 ## More full-featured pipeline example
 
-This example combines stage fan-out (`foreach`/`key`), family outputs and inputs (`family` + `pattern`), per-item and whole-run stages, schema validation, and a placeholder handoff stage:
+This example combines stage fan-out (`foreach`/`key`), family outputs and inputs (`family` + `pattern`), per-item and whole-run stages, schema validation, and loop rerouting (`reentry` + `go_to`):
 
 ```yaml
 pipeline_id: localization-release
 item_unit: paragraph
 determinism_policy: strict
+pipeline_type: looping
+max_loops: 3
 params:
   targets:
     languages: [fr, de, es]
@@ -181,6 +239,7 @@ stages:
       - family: pass1_translations
         pattern: pass1_pre/{lang}/paragraphs.jsonl
         schema: paragraphs.schema.json
+    reentry: retry_draft
 
   - id: qa_pass
     foreach: params.targets.languages
@@ -194,21 +253,14 @@ stages:
       - family: qa_reports
         pattern: qa/{lang}/report.json
         schema: qa-report.schema.json
-
-  - id: legal_review
-    mode: whole_run
-    placeholder: true
-    inputs:
-      - qa/fr/report.json
-      - qa/de/report.json
-      - qa/es/report.json
-    outputs:
-      - approved_release.json
+    go_to: retry_draft
 
   - id: publish
     mode: whole_run
     inputs:
-      - approved_release.json
+      - qa/fr/report.json
+      - qa/de/report.json
+      - qa/es/report.json
     outputs:
       - published_manifest.json
 ```
@@ -231,6 +283,17 @@ stages:
   - Allowed values: `strict`, `best_effort`.
   - Current compiler/runtime validates and propagates this value into generated flow metadata.
   - Practical recommendation: use `strict` unless you have a clear reason to track weaker determinism guarantees.
+
+- `pipeline_type` *(enum, optional, default: `straight`)*
+  - Allowed values: `straight`, `looping`.
+  - `straight` forbids stage loop metadata (`reentry`, `go_to`).
+  - `looping` enables runtime loop execution for per-item failures.
+
+- `max_loops` *(integer, optional, default: `0`)*
+  - Global loop budget for runtime loop-capable flows.
+  - Must be `>= 0`.
+  - For `pipeline_type: straight`, this must remain `0`.
+  - For `pipeline_type: looping`, this must be `>= 1`.
 
 - `stages` *(array, required, at least one stage)*
   - Ordered list of stages to execute.
@@ -262,6 +325,16 @@ Each stage entry supports:
   - Marks a stage as planned/no-op implementation.
   - Compiler skips importing user stage code for placeholder stages.
   - Placeholder stages skip forward-input dependency checks so they can reference planned artifacts not yet produced upstream.
+
+- `reentry` *(string, optional)*
+  - Declares a named loop anchor for this stage.
+  - Valid only when `pipeline_type: looping`.
+  - Reentry names must be unique across all stages.
+
+- `go_to` *(string, optional)*
+  - Declares a loop jump target by reentry name.
+  - Valid only when `pipeline_type: looping`.
+  - Target must resolve to an earlier stage's `reentry` name.
 
 ### Optional DSL expansion (`foreach`, `key`, `family`, `pattern`, `schema`)
 
@@ -335,6 +408,7 @@ The expanded result is still validated using normal Phase-1 rules (`inputs`/`out
 1. **No forward references in `inputs`**: a stage cannot consume an artifact that has not already been declared as an output of an earlier stage.
 2. **Declare what you actually produce**: declared outputs are enforced at runtime.
 3. **Use stable artifact names**: downstream stage contracts depend on exact names.
+4. **Loop routing is explicit**: in `looping` pipelines, `go_to` must reference a known earlier `reentry`; failed per-item cohorts are rerouted to that reentry stage.
 
 ### How this affects compile and run flows
 
@@ -348,6 +422,10 @@ The expanded result is still validated using normal Phase-1 rules (`inputs`/`out
   - call your stage implementation (`src/stages/*.py`) unless placeholder,
   - validate stage outputs after execution.
   - enforce any declared output `schema` files from `spec/stages/<stage_id>/`.
+  - snapshot stage outputs into loop-scoped paths (`<stage>/loops/<NNNN>/...`) and maintain a manifest artifact index so downstream logical artifact names resolve to latest concrete files.
+  - artifact index entries must stay within the run directory (relative paths without `..`); `seedpipe-run` raises when a snapshot path is absolute or escapes the workdir.
+  - manifest tracks `loop_iteration` (starts at 1 for the first pass and increments before rerunning a failed cohort); pipelines error when a reroute would raise `loop_iteration` **greater than** `max_loops`.
+  - for `pipeline_type: looping`, collect failed per-item results (stage business failures and runtime validation failures), and rerun only that failed cohort from the configured `go_to` reentry stage until success or `max_loops` is reached.
 
 ### Best practices when creating/generating pipelines
 
