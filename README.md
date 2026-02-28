@@ -232,6 +232,11 @@ stages:
   - Current compiler/runtime validates and propagates this value into generated flow metadata.
   - Practical recommendation: use `strict` unless you have a clear reason to track weaker determinism guarantees.
 
+- `pipeline_type` *(enum, optional, default: `straight`)*
+  - Allowed values: `straight`, `looping`.
+  - `straight` forbids stage loop metadata (`reentry`, `go_to`).
+  - `looping` enables declarative loop validation only (runtime control flow remains linear in current implementation).
+
 - `stages` *(array, required, at least one stage)*
   - Ordered list of stages to execute.
   - Order is meaningful: stages can only consume artifacts produced by earlier stages.
@@ -262,6 +267,16 @@ Each stage entry supports:
   - Marks a stage as planned/no-op implementation.
   - Compiler skips importing user stage code for placeholder stages.
   - Placeholder stages skip forward-input dependency checks so they can reference planned artifacts not yet produced upstream.
+
+- `reentry` *(string, optional)*
+  - Declares a named loop anchor for this stage.
+  - Valid only when `pipeline_type: looping`.
+  - Reentry names must be unique across all stages.
+
+- `go_to` *(string, optional)*
+  - Declares a loop jump target by reentry name.
+  - Valid only when `pipeline_type: looping`.
+  - Target must resolve to an earlier stage's `reentry` name.
 
 ### Optional DSL expansion (`foreach`, `key`, `family`, `pattern`, `schema`)
 
@@ -335,6 +350,7 @@ The expanded result is still validated using normal Phase-1 rules (`inputs`/`out
 1. **No forward references in `inputs`**: a stage cannot consume an artifact that has not already been declared as an output of an earlier stage.
 2. **Declare what you actually produce**: declared outputs are enforced at runtime.
 3. **Use stable artifact names**: downstream stage contracts depend on exact names.
+4. **Loop metadata is declarative**: in `looping` pipelines, `go_to` must reference a known earlier `reentry`; in `straight` pipelines, loop fields are invalid.
 
 ### How this affects compile and run flows
 

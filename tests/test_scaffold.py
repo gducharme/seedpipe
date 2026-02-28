@@ -22,6 +22,10 @@ class ScaffoldTests(unittest.TestCase):
             self.assertTrue((root / "spec/stages/transform/transformed_row.schema.json").exists())
             self.assertTrue((root / "spec/stages/future_review/reviewed_row.schema.json").exists())
             self.assertTrue((root / "spec/stages/publish/manifest.schema.json").exists())
+            agents_text = (root / "agents.markdown").read_text()
+            self.assertIn("Practical implementation notes", agents_text)
+            self.assertIn("run manifest stage order does not match compiled flow", agents_text)
+            self.assertIn("Fast debug checklist", agents_text)
             self.assertTrue((root / "agents-readme.markdown").exists())
             self.assertTrue((root / "artifacts/inputs/.gitkeep").exists())
             outputs_gitignore = root / "artifacts/outputs/.gitignore"

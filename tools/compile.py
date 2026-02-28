@@ -34,6 +34,8 @@ class StageIR:
     keys: tuple[tuple[str, str], ...]
     expected_outputs: tuple[dict[str, Any], ...]
     placeholder: bool
+    reentry: str | None
+    go_to: str | None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -41,6 +43,7 @@ class PipelineIR:
     pipeline_id: str
     item_unit: str
     determinism_policy: Literal["strict", "best_effort"]
+    pipeline_type: Literal["straight", "looping"]
     stages: tuple[StageIR, ...]
     artifact_producers: dict[str, str]
 
@@ -265,6 +268,7 @@ def normalize_pipeline(raw: dict[str, Any]) -> dict[str, Any]:
     normalized.setdefault("pipeline_id", "pipeline")
     normalized.setdefault("item_unit", "item")
     normalized.setdefault("determinism_policy", "strict")
+    normalized.setdefault("pipeline_type", "straight")
     stages = normalized.get("stages", [])
     if stages is None:
         stages = []
@@ -291,6 +295,8 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
 
     if pipeline.get("determinism_policy") not in {"strict", "best_effort"}:
         raise CompileError("pipeline.determinism_policy must be 'strict' or 'best_effort'")
+    if pipeline.get("pipeline_type") not in {"straight", "looping"}:
+        raise CompileError("pipeline.pipeline_type must be 'straight' or 'looping'")
 
     stages = pipeline.get("stages", [])
     if not stages:
@@ -298,6 +304,8 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
 
     seen_stage_ids: set[str] = set()
     produced_so_far: set[str] = set()
+    reentry_stage_by_name: dict[str, int] = {}
+    pending_go_tos: list[tuple[int, str]] = []
     for idx, stage in enumerate(stages):
         sid = stage.get("id")
         if not isinstance(sid, str) or not sid.strip():
@@ -313,6 +321,12 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
         placeholder = stage.get("placeholder")
         if not isinstance(placeholder, bool):
             raise CompileError(f"pipeline.stages[{idx}].placeholder must be a boolean")
+        reentry = stage.get("reentry")
+        if reentry is not None and (not isinstance(reentry, str) or not reentry.strip()):
+            raise CompileError(f"pipeline.stages[{idx}].reentry must be a non-empty string when provided")
+        go_to = stage.get("go_to")
+        if go_to is not None and (not isinstance(go_to, str) or not go_to.strip()):
+            raise CompileError(f"pipeline.stages[{idx}].go_to must be a non-empty string when provided")
 
         for field in ("inputs", "outputs"):
             if not isinstance(stage.get(field), list):
@@ -332,7 +346,36 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
                 "inputs must be produced by earlier stages"
             )
 
+        if isinstance(reentry, str):
+            if reentry in reentry_stage_by_name:
+                prior_idx = reentry_stage_by_name[reentry]
+                raise CompileError(
+                    f"pipeline.stages[{idx}].reentry duplicates pipeline.stages[{prior_idx}].reentry: {reentry}"
+                )
+            reentry_stage_by_name[reentry] = idx
+        if isinstance(go_to, str):
+            pending_go_tos.append((idx, go_to))
+
         produced_so_far.update(stage_outputs)
+
+    pipeline_type = pipeline["pipeline_type"]
+    if pipeline_type == "straight":
+        if reentry_stage_by_name or pending_go_tos:
+            raise CompileError("pipeline_type 'straight' does not allow stage fields 'reentry' or 'go_to'")
+        return
+
+    if not reentry_stage_by_name:
+        raise CompileError("pipeline_type 'looping' requires at least one stage with 'reentry'")
+
+    for idx, target in pending_go_tos:
+        target_stage_idx = reentry_stage_by_name.get(target)
+        if target_stage_idx is None:
+            raise CompileError(f"pipeline.stages[{idx}].go_to references unknown reentry: {target}")
+        if target_stage_idx >= idx:
+            raise CompileError(
+                f"pipeline.stages[{idx}].go_to must point to an earlier stage reentry; "
+                f"target '{target}' is at stage index {target_stage_idx}"
+            )
 
 
 def build_ir(pipeline: dict[str, Any]) -> PipelineIR:
@@ -347,6 +390,8 @@ def build_ir(pipeline: dict[str, Any]) -> PipelineIR:
             keys=tuple(sorted((str(k), str(v)) for k, v in stage.get("_keys", {}).items())),
             expected_outputs=tuple(stage.get("_expected_outputs", [])),
             placeholder=bool(stage.get("placeholder", False)),
+            reentry=stage.get("reentry"),
+            go_to=stage.get("go_to"),
         )
         stages.append(stage_ir)
         for artifact_name in stage_ir.outputs:
@@ -356,6 +401,7 @@ def build_ir(pipeline: dict[str, Any]) -> PipelineIR:
         pipeline_id=pipeline["pipeline_id"],
         item_unit=pipeline["item_unit"],
         determinism_policy=pipeline["determinism_policy"],
+        pipeline_type=pipeline["pipeline_type"],
         stages=tuple(stages),
         artifact_producers=artifact_producers,
     )
