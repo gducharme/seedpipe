@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.compile import CompilePaths, compile_pipeline
 from tools.run import run_generated_flow
+
 
 
 class RunCommandTests(unittest.TestCase):
@@ -413,6 +413,183 @@ def run_whole(ctx) -> None:
             index = manifest.get("artifact_index", {})
             self.assertIsInstance(index, dict)
             self.assertTrue(str(index.get("processed.jsonl", "")).startswith("work/loops/0002/"))
+
+    def test_run_generated_flow_loop_errors_after_max_loops(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            contracts_dir = root / "contracts"
+            contracts_dir.mkdir()
+            pipeline_path = root / "pipeline.yaml"
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "looping-pipe-fail",
+                        "item_unit": "item",
+                        "determinism_policy": "strict",
+                        "pipeline_type": "looping",
+                        "max_loops": 2,
+                        "stages": [
+                            {"id": "ingest", "mode": "whole_run", "inputs": [], "outputs": ["items.jsonl"]},
+                            {
+                                "id": "work",
+                                "mode": "per_item",
+                                "inputs": ["items.jsonl"],
+                                "outputs": ["fails.jsonl"],
+                                "reentry": "retry_work",
+                            },
+                            {
+                                "id": "publish",
+                                "mode": "whole_run",
+                                "inputs": ["fails.jsonl"],
+                                "outputs": ["manifest.json"],
+                            },
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=generated_dir,
+                )
+            )
+
+            src_stages_dir = root / "src" / "stages"
+            src_stages_dir.mkdir(parents=True)
+            (src_stages_dir / "ingest.py").write_text(
+                """
+import json
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    Path("items.jsonl").write_text(json.dumps({"item_id": "solo"}))
+""".strip()
+            )
+            (src_stages_dir / "work.py").write_text(
+                """
+from seedpipe.generated.models import ItemResult
+
+
+def run_item(ctx, item):
+    return ItemResult(item_id=str(item.get("item_id", "")), ok=False, error={"code": "fail", "message": "always fails", "source": "stage"})
+""".strip()
+            )
+            (src_stages_dir / "publish.py").write_text(
+                """
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    Path("manifest.json").write_text("done")
+""".strip()
+            )
+
+            with self.assertRaises(RuntimeError) as cm:
+                run_generated_flow(
+                    generated_dir=generated_dir,
+                    run_id="looping-pipe-fail",
+                    output_dir=root / "artifacts" / "outputs" / "looping-pipe-fail",
+                    inputs_dir=root / "artifacts" / "inputs",
+                )
+
+            self.assertIn("looping-pipe-fail", str(cm.exception))
+            self.assertIn("exceeded max_loops", str(cm.exception))
+            manifest = json.loads(
+                (root / "artifacts" / "outputs" / "looping-pipe-fail" / ".seedpipe_run_manifest.json").read_text()
+            )
+            self.assertEqual(manifest.get("loop_iteration"), 2)
+            self.assertEqual(manifest.get("failure_stage_id"), "work")
+
+    def test_run_generated_flow_straight_pipeline_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            contracts_dir = root / "contracts"
+            contracts_dir.mkdir()
+            pipeline_path = root / "pipeline.yaml"
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "default-pipe",
+                        "item_unit": "item",
+                        "determinism_policy": "strict",
+                        "stages": [
+                            {"id": "ingest", "mode": "whole_run", "inputs": [], "outputs": ["items.jsonl"]},
+                            {
+                                "id": "publish",
+                                "mode": "whole_run",
+                                "inputs": ["items.jsonl"],
+                                "outputs": ["manifest.json"],
+                            },
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=generated_dir,
+                )
+            )
+
+            src_stages_dir = root / "src" / "stages"
+            src_stages_dir.mkdir(parents=True)
+            (src_stages_dir / "ingest.py").write_text(
+                """
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    Path("items.jsonl").write_text("dummy")
+""".strip()
+            )
+            (src_stages_dir / "publish.py").write_text(
+                """
+import json
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    Path("manifest.json").write_text(json.dumps({"pipeline_id": "default-pipe"}))
+""".strip()
+            )
+
+            output_dir = root / "artifacts" / "outputs" / "default-pipe"
+            code = run_generated_flow(
+                generated_dir=generated_dir,
+                run_id="default-pipe",
+                output_dir=output_dir,
+                inputs_dir=root / "artifacts" / "inputs",
+            )
+
+            self.assertEqual(code, 0)
+            self.assertTrue((output_dir / "manifest.json").exists())
 
 
 if __name__ == "__main__":

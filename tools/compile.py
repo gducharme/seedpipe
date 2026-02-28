@@ -294,14 +294,16 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
     pipeline_id = pipeline.get("pipeline_id")
     if not isinstance(pipeline_id, str) or not pipeline_id.strip():
         raise CompileError("pipeline.pipeline_id must be a non-empty string")
+    pid = pipeline_id
 
     if pipeline.get("determinism_policy") not in {"strict", "best_effort"}:
-        raise CompileError("pipeline.determinism_policy must be 'strict' or 'best_effort'")
-    if pipeline.get("pipeline_type") not in {"straight", "looping"}:
-        raise CompileError("pipeline.pipeline_type must be 'straight' or 'looping'")
+        raise CompileError(f"pipeline '{pid}' determinism_policy must be 'strict' or 'best_effort'")
+    pipeline_type = pipeline.get("pipeline_type")
+    if pipeline_type not in {"straight", "looping"}:
+        raise CompileError(f"pipeline '{pid}' pipeline_type must be 'straight' or 'looping'")
     max_loops = pipeline.get("max_loops", 0)
     if not isinstance(max_loops, int) or max_loops < 0:
-        raise CompileError("pipeline.max_loops must be an integer >= 0")
+        raise CompileError(f"pipeline '{pid}' max_loops must be an integer >= 0")
 
     stages = pipeline.get("stages", [])
     if not stages:
@@ -354,8 +356,9 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
         if isinstance(reentry, str):
             if reentry in reentry_stage_by_name:
                 prior_idx = reentry_stage_by_name[reentry]
+                prior_stage_id = stages[prior_idx].get("id", "<unknown>")
                 raise CompileError(
-                    f"pipeline.stages[{idx}].reentry duplicates pipeline.stages[{prior_idx}].reentry: {reentry}"
+                    f"pipeline '{pid}' stage[{idx}] (id='{sid}') reentry '{reentry}' duplicates stage[{prior_idx}] (id='{prior_stage_id}')"
                 )
             reentry_stage_by_name[reentry] = idx
         if isinstance(go_to, str):
@@ -366,24 +369,30 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
     pipeline_type = pipeline["pipeline_type"]
     if pipeline_type == "straight":
         if reentry_stage_by_name or pending_go_tos:
-            raise CompileError("pipeline_type 'straight' does not allow stage fields 'reentry' or 'go_to'")
+            raise CompileError(
+                f"pipeline '{pid}' with type 'straight' does not allow 'reentry' or 'go_to' stage fields"
+            )
         if max_loops != 0:
-            raise CompileError("pipeline_type 'straight' requires max_loops=0")
+            raise CompileError(f"pipeline '{pid}' with type 'straight' requires max_loops=0")
         return
 
     if max_loops < 1:
-        raise CompileError("pipeline_type 'looping' requires max_loops >= 1")
+        raise CompileError(f"pipeline '{pid}' with type 'looping' requires max_loops >= 1")
     if not reentry_stage_by_name:
         raise CompileError("pipeline_type 'looping' requires at least one stage with 'reentry'")
 
     for idx, target in pending_go_tos:
+        stage_id = stages[idx].get("id", "<unknown>")
         target_stage_idx = reentry_stage_by_name.get(target)
         if target_stage_idx is None:
-            raise CompileError(f"pipeline.stages[{idx}].go_to references unknown reentry: {target}")
+            raise CompileError(
+                f"pipeline '{pid}' stage[{idx}] (id='{stage_id}') go_to='{target}' references unknown reentry"
+            )
+        target_stage_id = stages[target_stage_idx].get("id", "<unknown>")
         if target_stage_idx >= idx:
             raise CompileError(
-                f"pipeline.stages[{idx}].go_to must point to an earlier stage reentry; "
-                f"target '{target}' is at stage index {target_stage_idx}"
+                f"pipeline '{pid}' stage[{idx}] (id='{stage_id}') go_to='{target}' points to stage[{target_stage_idx}] "
+                f"(id='{target_stage_id}') which is not earlier"
             )
 
 
@@ -704,6 +713,7 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
             call_lines.append("                        next_cycle_start_index = _stage_index(loop_target)")
             call_lines.append("                        next_active_item_ids = sorted(set(stage_failed_item_ids))")
             call_lines.append("                        loop_continue = True")
+            call_lines.append(f"                        loop_origin_stage = {stage.stage_id!r}")
             call_lines.append("                    else:")
             call_lines.append(
                 f"                        raise RuntimeError(f'stage {stage.stage_id} failed for items: {{sorted(set(stage_failed_item_ids))}}')"
@@ -858,10 +868,21 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         + "        raise ValueError('loop iteration must be >= 1')\n"
         + "    index = _artifact_index(manifest)\n"
         + "    for output_name in outputs:\n"
-        + "        src = Path(output_name)\n"
+        + "        rel_path = Path(output_name)\n"
+        + "        if rel_path.is_absolute():\n"
+        + "            raise ValueError(\n"
+        + "                f\"pipeline '{PIPELINE_ID}' stage '{stage_id}' loop snapshot path '{output_name}' must be relative to run dir\"\n"
+        + "            )\n"
+        + "        if any(part == '..' for part in rel_path.parts):\n"
+        + "            raise ValueError(\n"
+        + "                f\"pipeline '{PIPELINE_ID}' stage '{stage_id}' loop snapshot path '{output_name}' must not escape run dir\"\n"
+        + "            )\n"
+        + "        src = rel_path\n"
         + "        if not src.exists():\n"
-        + "            raise FileNotFoundError(f'required output artifact missing for snapshot: {src}')\n"
-        + "        dst = Path(stage_id) / 'loops' / f'{loop_iteration:04d}' / output_name\n"
+        + "            raise FileNotFoundError(\n"
+        + "                f\"pipeline '{PIPELINE_ID}' stage '{stage_id}' missing output '{output_name}' needed for snapshot\"\n"
+        + "            )\n"
+        + "        dst = Path(stage_id) / 'loops' / f'{loop_iteration:04d}' / rel_path\n"
         + "        dst.parent.mkdir(parents=True, exist_ok=True)\n"
         + "        shutil.copy2(src, dst)\n"
         + "        index[output_name] = dst.as_posix()\n"
@@ -930,6 +951,7 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         + "        loop_continue = False\n"
         + "        next_cycle_start_index = cycle_start_index\n"
         + "        next_active_item_ids: list[str] = []\n"
+        + "        loop_origin_stage: str | None = None\n"
         + "        run_config['_loop_iteration'] = loop_iteration\n"
         + "        run_config['_active_item_ids'] = sorted(active_item_ids) if active_item_ids is not None else []\n"
         + "        run_config['_artifact_index'] = _artifact_index(manifest)\n"
@@ -937,11 +959,13 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         + "\n".join(call_lines)
         + "\n        if loop_continue:\n"
         + "            if PIPELINE_TYPE != 'looping':\n"
-        + "                raise RuntimeError('loop jump requested in straight pipeline')\n"
+        + "                raise RuntimeError(f'loop jump requested in straight pipeline {PIPELINE_ID}')\n"
         + "            if MAX_LOOPS <= 0:\n"
-        + "                raise RuntimeError('loop jump requested but max_loops is 0')\n"
+        + "                raise RuntimeError(f'loop jump requested but max_loops is 0 for pipeline {PIPELINE_ID}')\n"
         + "            if loop_iteration >= MAX_LOOPS:\n"
-        + "                raise RuntimeError(f'max_loops exceeded: {MAX_LOOPS}')\n"
+        + "                raise RuntimeError(\n"
+        + "                    f'pipeline {PIPELINE_ID} stage {loop_origin_stage or \"<unknown>\"} exceeded max_loops={MAX_LOOPS}'\n"
+        + "                )\n"
         + "            loop_iteration += 1\n"
         + "            cycle_start_index = next_cycle_start_index\n"
         + "            active_item_ids = set(next_active_item_ids)\n"

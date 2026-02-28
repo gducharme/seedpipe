@@ -146,6 +146,7 @@ Compiler does not create or modify source stage implementation files (`src/stage
   - reruns process failed items only.
   - reroute cycles stop when cohort is empty or `max_loops` is exceeded (hard error).
   - run manifest stores loop iteration, active item cohort, item attempts, and artifact index for deterministic resolution and resume context.
+- Manifest artifact index entries must remain relative to the run directory without `..` components so snapshots cannot escape the workspace.
 - Placeholder stages skip user imports; behavior is no-op success pattern by mode.
 
 ## 2.3 `tools.run` executable behavior

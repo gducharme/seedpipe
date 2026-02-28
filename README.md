@@ -423,6 +423,8 @@ The expanded result is still validated using normal Phase-1 rules (`inputs`/`out
   - validate stage outputs after execution.
   - enforce any declared output `schema` files from `spec/stages/<stage_id>/`.
   - snapshot stage outputs into loop-scoped paths (`<stage>/loops/<NNNN>/...`) and maintain a manifest artifact index so downstream logical artifact names resolve to latest concrete files.
+  - artifact index entries must stay within the run directory (relative paths without `..`); `seedpipe-run` raises when a snapshot path is absolute or escapes the workdir.
+  - manifest tracks `loop_iteration` (starts at 1 for the first pass and increments before rerunning a failed cohort); pipelines error when a reroute would raise `loop_iteration` **greater than** `max_loops`.
   - for `pipeline_type: looping`, collect failed per-item results (stage business failures and runtime validation failures), and rerun only that failed cohort from the configured `go_to` reentry stage until success or `max_loops` is reached.
 
 ### Best practices when creating/generating pipelines

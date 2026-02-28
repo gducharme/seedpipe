@@ -29,6 +29,7 @@ class StageContext:
         return out
 
     def _current_output_names(self) -> set[str]:
+        # Track the outputs currently being written so we resolve live paths during validation.
         names: set[str] = set()
         for output in self.expected_outputs or []:
             path = output.get("path")
