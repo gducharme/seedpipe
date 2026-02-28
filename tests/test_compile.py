@@ -169,13 +169,29 @@ stages: []
         with self.assertRaises(CompileError):
             normalize_pipeline(raw)
 
-    def test_normalize_pipeline_rejects_output_object_missing_schema(self) -> None:
+    def test_normalize_pipeline_allows_output_object_missing_schema(self) -> None:
         raw = {
             "pipeline_id": "p1",
             "stages": [
                 {
                     "id": "producer",
-                    "outputs": [{"family": "f", "pattern": "out/{lang}.json", "key": "lang"}],
+                    "outputs": [{"family": "f", "pattern": "out.json"}],
+                }
+            ],
+        }
+
+        normalized = normalize_pipeline(raw)
+        expected_outputs = normalized["stages"][0]["_expected_outputs"]
+        self.assertEqual(expected_outputs[0]["path"], "out.json")
+        self.assertNotIn("schema", expected_outputs[0])
+
+    def test_normalize_pipeline_rejects_output_object_non_string_schema(self) -> None:
+        raw = {
+            "pipeline_id": "p1",
+            "stages": [
+                {
+                    "id": "producer",
+                    "outputs": [{"family": "f", "pattern": "out.json", "schema": 123}],
                 }
             ],
         }
@@ -426,11 +442,14 @@ stages: []
             self.assertEqual(result["pipeline_id"], "phase1-default")
             self.assertTrue((output_dir / "flow.py").exists())
             self.assertTrue((output_dir / "models.py").exists())
+            self.assertTrue((output_dir / "run_manifest_template.json").exists())
             self.assertTrue((output_dir / "stages" / "ingest.py").exists())
             self.assertTrue((output_dir / "stages" / "__init__.py").exists())
 
             flow_text = (output_dir / "flow.py").read_text()
             self.assertIn("append_item_state_row", flow_text)
+            self.assertIn("RUN_MANIFEST_FILE", flow_text)
+            self.assertIn("_resolve_resume_index", flow_text)
 
             ingest_wrapper = (output_dir / "stages" / "ingest.py").read_text()
             self.assertIn("def run_whole", ingest_wrapper)
@@ -442,6 +461,9 @@ stages: []
             self.assertEqual(
                 compile_report["artifact_schema_map"]["published_manifest.json"],
                 "manifest.schema.json",
+            )
+            self.assertTrue(
+                any(path.endswith("/run_manifest_template.json") for path in compile_report["emitted_files"])
             )
 
     def test_compile_pipeline_supports_placeholder_stage(self) -> None:

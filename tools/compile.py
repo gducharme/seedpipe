@@ -204,9 +204,13 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                 family = entry.get("family")
                 pattern = entry.get("pattern")
                 schema = entry.get("schema")
-                if not isinstance(family, str) or not isinstance(pattern, str) or not isinstance(schema, str):
+                if not isinstance(family, str) or not isinstance(pattern, str):
                     raise CompileError(
-                        f"pipeline.stages[{idx}].outputs[{output_idx}] object entries require string 'family', 'pattern', and 'schema'"
+                        f"pipeline.stages[{idx}].outputs[{output_idx}] object entries require string 'family' and 'pattern'"
+                    )
+                if schema is not None and not isinstance(schema, str):
+                    raise CompileError(
+                        f"pipeline.stages[{idx}].outputs[{output_idx}].schema must be a string when provided"
                     )
 
                 out_foreach = entry.get("foreach")
@@ -241,9 +245,9 @@ def expand_pipeline_dsl(raw: dict[str, Any]) -> dict[str, Any]:
                         {
                             "family": family,
                             "pattern": pattern,
-                            "schema": schema,
                             "path": path,
                             "keys": dict(sorted((str(k), str(v)) for k, v in output_key_scope.items())),
+                            **({"schema": schema} if isinstance(schema, str) else {}),
                         }
                     )
 
@@ -563,7 +567,7 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         for sid in stage_ids
     )
     call_lines = []
-    for stage in ir.stages:
+    for stage_index, stage in enumerate(ir.stages):
         stage_mod_name = re.sub(r"[^a-zA-Z0-9_]", "_", stage.stage_id)
         invocations: list[tuple[dict[str, str], list[dict[str, Any]]]] = []
         seen_signatures: set[tuple[tuple[tuple[str, str], ...], tuple[str, ...]]] = set()
@@ -595,55 +599,70 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         if not invocations:
             invocations.append((dict(stage.keys), list(stage.expected_outputs)))
 
+        call_lines.append(
+            f"    if _should_run_stage(manifest=manifest, stage_id={stage.stage_id!r}, stage_index={stage_index}, resume_index=resume_index):"
+        )
+        call_lines.append(f"        _mark_stage(manifest, stage_id={stage.stage_id!r}, status='running', attempt=attempt)")
+        call_lines.append("        try:")
         for invocation_keys, invocation_expected in invocations:
             if stage.mode == "whole_run":
                 call_lines.append(
-                    f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, keys={invocation_keys!r}, expected_outputs={invocation_expected!r})"
+                    f"            ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, keys={invocation_keys!r}, expected_outputs={invocation_expected!r})"
                 )
-                call_lines.append(f"    stage_{stage_mod_name}.run_whole(ctx)")
+                call_lines.append(f"            stage_{stage_mod_name}.run_whole(ctx)")
                 continue
 
             items_artifact = stage.inputs[0] if stage.inputs else "items.jsonl"
             call_lines.append(
-                f"    ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, keys={invocation_keys!r}, expected_outputs={invocation_expected!r})"
+                f"            ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, keys={invocation_keys!r}, expected_outputs={invocation_expected!r})"
             )
             call_lines.append(
-                f"    for item in iter_items_deterministic(ctx, items_artifact={items_artifact!r}, keys=ctx.keys):"
+                f"            for item in iter_items_deterministic(ctx, items_artifact={items_artifact!r}, keys=ctx.keys):"
             )
-            call_lines.append("        item_id = item['item_id']")
-            call_lines.append("        append_item_state_row({")
-            call_lines.append("            'run_id': run_id,")
-            call_lines.append("            'item_id': item_id,")
-            call_lines.append("            'state': 'in_progress',")
-            call_lines.append(f"            'stage_id': {stage.stage_id!r},")
-            call_lines.append("            'attempt': attempt,")
-            call_lines.append("            'updated_at': now_rfc3339(),")
-            call_lines.append("        })")
-            call_lines.append(f"        res = stage_{stage_mod_name}.run_item(ctx, item)")
-            call_lines.append("        if res.ok:")
-            call_lines.append("            append_item_state_row({")
-            call_lines.append("                'run_id': run_id,")
-            call_lines.append("                'item_id': item_id,")
-            call_lines.append("                'state': 'succeeded',")
-            call_lines.append(f"                'stage_id': {stage.stage_id!r},")
-            call_lines.append("                'attempt': attempt,")
-            call_lines.append("                'updated_at': now_rfc3339(),")
-            call_lines.append("            })")
-            call_lines.append("        else:")
-            call_lines.append("            append_item_state_row({")
-            call_lines.append("                'run_id': run_id,")
-            call_lines.append("                'item_id': item_id,")
-            call_lines.append("                'state': 'failed',")
-            call_lines.append(f"                'stage_id': {stage.stage_id!r},")
-            call_lines.append("                'attempt': attempt,")
-            call_lines.append("                'error': res.error,")
-            call_lines.append("                'updated_at': now_rfc3339(),")
-            call_lines.append("            })")
+            call_lines.append("                item_id = item['item_id']")
+            call_lines.append("                append_item_state_row({")
+            call_lines.append("                    'run_id': run_id,")
+            call_lines.append("                    'item_id': item_id,")
+            call_lines.append("                    'state': 'in_progress',")
+            call_lines.append(f"                    'stage_id': {stage.stage_id!r},")
+            call_lines.append("                    'attempt': attempt,")
+            call_lines.append("                    'updated_at': now_rfc3339(),")
+            call_lines.append("                })")
+            call_lines.append(f"                res = stage_{stage_mod_name}.run_item(ctx, item)")
+            call_lines.append("                if res.ok:")
+            call_lines.append("                    append_item_state_row({")
+            call_lines.append("                        'run_id': run_id,")
+            call_lines.append("                        'item_id': item_id,")
+            call_lines.append("                        'state': 'succeeded',")
+            call_lines.append(f"                        'stage_id': {stage.stage_id!r},")
+            call_lines.append("                        'attempt': attempt,")
+            call_lines.append("                        'updated_at': now_rfc3339(),")
+            call_lines.append("                    })")
+            call_lines.append("                else:")
+            call_lines.append("                    append_item_state_row({")
+            call_lines.append("                        'run_id': run_id,")
+            call_lines.append("                        'item_id': item_id,")
+            call_lines.append("                        'state': 'failed',")
+            call_lines.append(f"                        'stage_id': {stage.stage_id!r},")
+            call_lines.append("                        'attempt': attempt,")
+            call_lines.append("                        'error': res.error,")
+            call_lines.append("                        'updated_at': now_rfc3339(),")
+            call_lines.append("                    })")
+            call_lines.append(
+                f"                    raise RuntimeError(f'stage {stage.stage_id} failed for item {{item_id}}: {{res.error}}')"
+            )
+        call_lines.append(f"            _mark_stage(manifest, stage_id={stage.stage_id!r}, status='completed', attempt=attempt)")
+        call_lines.append("        except Exception as exc:")
+        call_lines.append(
+            f"            _mark_stage(manifest, stage_id={stage.stage_id!r}, status='failed', attempt=attempt, error={{'message': str(exc)}})"
+        )
+        call_lines.append("            raise")
 
     return (
         generated_banner(meta)
         + "from __future__ import annotations\n\n"
         + "import argparse\n"
+        + "import json\n"
         + "from datetime import datetime, timezone\n"
         + "from pathlib import Path\n\n"
         + imports
@@ -655,12 +674,106 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         + f"ITEM_UNIT = {ir.item_unit!r}\n"
         + f"DETERMINISM_POLICY = {ir.determinism_policy!r}\n"
         + f"STAGES = {stage_ids!r}\n\n"
+        + "RUN_MANIFEST_FILE = '.seedpipe_run_manifest.json'\n\n"
         + "def now_rfc3339() -> str:\n"
         + "    return datetime.now(timezone.utc).isoformat()\n\n"
+        + "def _read_manifest(run_id: str) -> dict[str, object]:\n"
+        + "    path = Path(RUN_MANIFEST_FILE)\n"
+        + "    if not path.exists():\n"
+        + "        stages = [\n"
+        + "            {\n"
+        + "                'stage_id': stage_id,\n"
+        + "                'status': 'pending',\n"
+        + "                'attempt': 0,\n"
+        + "                'updated_at': now_rfc3339(),\n"
+        + "            }\n"
+        + "            for stage_id in STAGES\n"
+        + "        ]\n"
+        + "        payload = {\n"
+        + "            'manifest_version': 'phase1-run-resume-v1',\n"
+        + "            'pipeline_id': PIPELINE_ID,\n"
+        + "            'run_id': run_id,\n"
+        + "            'created_at': now_rfc3339(),\n"
+        + "            'updated_at': now_rfc3339(),\n"
+        + "            'failure_stage_id': None,\n"
+        + "            'stages': stages,\n"
+        + "        }\n"
+        + "        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\\n')\n"
+        + "        return payload\n"
+        + "    payload = json.loads(path.read_text())\n"
+        + "    if not isinstance(payload, dict):\n"
+        + "        raise ValueError('run manifest must be a JSON object')\n"
+        + "    return payload\n\n"
+        + "def _write_manifest(manifest: dict[str, object]) -> None:\n"
+        + "    manifest['updated_at'] = now_rfc3339()\n"
+        + "    Path(RUN_MANIFEST_FILE).write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\\n')\n\n"
+        + "def _stage_rows(manifest: dict[str, object]) -> list[dict[str, object]]:\n"
+        + "    rows = manifest.get('stages', [])\n"
+        + "    if not isinstance(rows, list):\n"
+        + "        raise ValueError('run manifest field stages must be an array')\n"
+        + "    typed_rows = [row for row in rows if isinstance(row, dict)]\n"
+        + "    if len(typed_rows) != len(rows):\n"
+        + "        raise ValueError('run manifest stages entries must be objects')\n"
+        + "    return typed_rows\n\n"
+        + "def _stage_index(stage_id: str) -> int:\n"
+        + "    try:\n"
+        + "        return STAGES.index(stage_id)\n"
+        + "    except ValueError as exc:\n"
+        + "        raise ValueError(f'unknown stage id in run manifest: {stage_id}') from exc\n\n"
+        + "def _first_incomplete_stage(manifest: dict[str, object]) -> str | None:\n"
+        + "    for row in _stage_rows(manifest):\n"
+        + "        stage_id = str(row.get('stage_id', ''))\n"
+        + "        status = str(row.get('status', 'pending'))\n"
+        + "        if status != 'completed':\n"
+        + "            return stage_id\n"
+        + "    return None\n\n"
+        + "def _mark_stage(manifest: dict[str, object], stage_id: str, status: str, attempt: int, error: object | None = None) -> None:\n"
+        + "    for row in _stage_rows(manifest):\n"
+        + "        if str(row.get('stage_id', '')) != stage_id:\n"
+        + "            continue\n"
+        + "        row['status'] = status\n"
+        + "        row['attempt'] = attempt\n"
+        + "        row['updated_at'] = now_rfc3339()\n"
+        + "        if error is not None:\n"
+        + "            row['error'] = error\n"
+        + "        elif 'error' in row:\n"
+        + "            del row['error']\n"
+        + "        manifest['failure_stage_id'] = stage_id if status == 'failed' else None\n"
+        + "        _write_manifest(manifest)\n"
+        + "        return\n"
+        + "    raise ValueError(f'run manifest missing stage row for {stage_id}')\n\n"
+        + "def _ensure_manifest_stages(manifest: dict[str, object]) -> None:\n"
+        + "    manifest_stage_ids = [str(row.get('stage_id', '')) for row in _stage_rows(manifest)]\n"
+        + "    if manifest_stage_ids != STAGES:\n"
+        + "        raise ValueError('run manifest stage order does not match compiled flow')\n\n"
+        + "def _resolve_resume_index(run_config: dict[str, object], manifest: dict[str, object]) -> int:\n"
+        + "    resume_stage = run_config.get('_resume_stage_id')\n"
+        + "    if isinstance(resume_stage, str) and resume_stage:\n"
+        + "        return _stage_index(resume_stage)\n"
+        + "    failure_stage = manifest.get('failure_stage_id')\n"
+        + "    if isinstance(failure_stage, str) and failure_stage:\n"
+        + "        return _stage_index(failure_stage)\n"
+        + "    first_incomplete = _first_incomplete_stage(manifest)\n"
+        + "    if first_incomplete is None:\n"
+        + "        return len(STAGES)\n"
+        + "    return _stage_index(first_incomplete)\n\n"
+        + "def _should_run_stage(manifest: dict[str, object], stage_id: str, stage_index: int, resume_index: int) -> bool:\n"
+        + "    if stage_index < resume_index:\n"
+        + "        return False\n"
+        + "    for row in _stage_rows(manifest):\n"
+        + "        if str(row.get('stage_id', '')) != stage_id:\n"
+        + "            continue\n"
+        + "        return str(row.get('status', 'pending')) != 'completed'\n"
+        + "    return True\n\n"
         + "def run(run_config: dict[str, object], attempt: int = 1) -> int:\n"
         + "    run_id = str(run_config['run_id'])\n"
         + "    run_config.setdefault('_pipe_root', str(Path(__file__).resolve().parents[1]))\n"
         + "    ctx_base = StageContext.make_base(run_config=run_config)\n"
+        + "    manifest = _read_manifest(run_id)\n"
+        + "    _ensure_manifest_stages(manifest)\n"
+        + "    resume_index = _resolve_resume_index(run_config=run_config, manifest=manifest)\n"
+        + "    if resume_index >= len(STAGES):\n"
+        + "        return 0\n"
         + "\n".join(call_lines)
         + "\n    return 0\n\n"
         + "def main() -> None:\n"
@@ -673,6 +786,28 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         + "if __name__ == '__main__':\n"
         + "    main()\n"
     )
+
+
+def emit_run_manifest_template(ir: PipelineIR) -> str:
+    stage_rows = [
+        {
+            "stage_id": stage.stage_id,
+            "status": "pending",
+            "attempt": 0,
+            "updated_at": "1970-01-01T00:00:00+00:00",
+        }
+        for stage in ir.stages
+    ]
+    payload = {
+        "manifest_version": "phase1-run-resume-v1",
+        "pipeline_id": ir.pipeline_id,
+        "run_id": "",
+        "created_at": "1970-01-01T00:00:00+00:00",
+        "updated_at": "1970-01-01T00:00:00+00:00",
+        "failure_stage_id": None,
+        "stages": stage_rows,
+    }
+    return stable_json(payload)
 
 
 def emit_ir_json(ir: PipelineIR) -> str:
@@ -711,6 +846,9 @@ def compile_pipeline(paths: CompilePaths, *, emit_debug_ir: bool = True) -> dict
     )
     emitted_hashes[str((paths.output_dir / "flow.py").as_posix())] = write_file(
         paths.output_dir / "flow.py", emit_flow_py(ir, meta)
+    )
+    emitted_hashes[str((paths.output_dir / "run_manifest_template.json").as_posix())] = write_file(
+        paths.output_dir / "run_manifest_template.json", emit_run_manifest_template(ir)
     )
 
     for stage in ir.stages:

@@ -47,7 +47,7 @@ README defines the expected `pipeline.yaml` model:
 - Optional DSL expansion accepted by compiler normalization:
   - Stage-level `foreach` + `key` expands stage I/O templates across all parameter values while keeping a single concrete stage ID (no stage-module duplication).
   - Object entries in `inputs` with `family` + `pattern` + `schema` for template-based artifact resolution.
-  - Object entries in `outputs` with `family` + `pattern` + `schema` and keying by `key` or output-level `foreach` + `key`.
+- Object entries in `outputs` with required `family` + `pattern` and optional `schema`, keyed by `key` or output-level `foreach` + `key`.
   - `{var}` template interpolation in string `inputs`/`outputs` from stage/output scope.
   - Compiler expansion tracks resolved family selection values as stage/output `keys` metadata (not `bind` fields), and these keys are propagated into generated runtime stage contexts.
 - For stage-level `foreach`, compiler now composes one stage with unioned concrete input/output artifact paths and per-output `keys` metadata so runtime invocations remain parameter-aware without generating one Python wrapper per parameter value.
@@ -107,6 +107,7 @@ Compilation fails when:
 Compiler emits (at minimum):
 - `generated/models.py`
 - `generated/flow.py`
+- `generated/run_manifest_template.json` (compile-time template for per-run resume manifest seeding)
 - `generated/stages/<stage>.py` wrappers
 - `generated/stages/__init__.py`
 - `generated/compile_report.json`
@@ -154,6 +155,9 @@ It also ensures source stage stubs exist under `src/stages/*.py` for non-placeho
 - Changes CWD into run output directory for run execution.
 - Calls `flow.run(run_config=<effective>, attempt=<attempt>)` and returns its int exit code.
 - `run_config` may be directly supplied; must contain valid string `run_id` (or be set by `--run-id`).
+- Seeds and consumes a per-run manifest at `<run_output_dir>/.seedpipe_run_manifest.json` to drive rerun behavior.
+- Existing run directories are no longer always rejected: rerun is refused only when manifest marks every stage `completed`.
+- If an existing run manifest contains a failure/incomplete stage, runner injects `_resume_stage_id` into `run_config` so generated flow resumes at the failure point.
 
 ## 2.4 `tools.scaffold` executable behavior
 
@@ -224,7 +228,8 @@ The run tests assert:
 - generated flow can execute and write artifacts.
 - run receives attempt value and run config fields.
 - default output directory resolution works.
-- existing run directory raises `FileExistsError`.
+- completed run manifest in an existing run directory raises `FileExistsError`.
+- existing incomplete run resumes from manifest failure stage.
 - missing `flow.py` raises `FileNotFoundError`.
 - missing inputs directory raises `FileNotFoundError`.
 - local `src/stages` can be mounted for generated wrappers importing `seedpipe.src.stages.*`.
