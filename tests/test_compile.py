@@ -382,7 +382,7 @@ stages: []
             ],
         }
 
-        with self.assertRaisesRegex(CompileError, "pipeline.pipeline_type"):
+        with self.assertRaisesRegex(CompileError, "pipeline 'p1' pipeline_type"):
             validate_pipeline_structure(normalized)
 
     def test_validate_pipeline_structure_rejects_invalid_max_loops(self) -> None:
@@ -396,7 +396,7 @@ stages: []
                 {"id": "s1", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["x.json"]},
             ],
         }
-        with self.assertRaisesRegex(CompileError, "pipeline.max_loops"):
+        with self.assertRaisesRegex(CompileError, "pipeline 'p1' max_loops"):
             validate_pipeline_structure(normalized)
 
     def test_validate_pipeline_structure_rejects_straight_with_nonzero_max_loops(self) -> None:
@@ -438,7 +438,7 @@ stages: []
             ],
         }
 
-        with self.assertRaisesRegex(CompileError, "does not allow stage fields"):
+        with self.assertRaisesRegex(CompileError, "does not allow 'reentry' or 'go_to' stage fields"):
             validate_pipeline_structure(normalized)
 
     def test_validate_pipeline_structure_rejects_looping_without_reentry(self) -> None:
@@ -501,7 +501,7 @@ stages: []
             ],
         }
 
-        with self.assertRaisesRegex(CompileError, "unknown reentry|earlier stage"):
+        with self.assertRaisesRegex(CompileError, r"go_to='finish'.*not earlier"):
             validate_pipeline_structure(normalized)
 
     def test_validate_pipeline_structure_allows_looping_with_backward_go_to(self) -> None:
