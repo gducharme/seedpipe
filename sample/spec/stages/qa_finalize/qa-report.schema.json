@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["lang", "status", "checked_items"],
+  "properties": {
+    "lang": {"type": "string", "minLength": 2},
+    "status": {"type": "string", "enum": ["pass", "fail"]},
+    "checked_items": {"type": "integer", "minimum": 0}
+  }
+}

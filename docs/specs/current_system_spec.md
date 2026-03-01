@@ -19,10 +19,12 @@ This document specifies the **currently implemented** behavior of the repository
   - `seedpipe-compile`
   - `seedpipe-scaffold`
   - `seedpipe-run`
+  - `seedpipe-watch`
 - Module fallbacks are documented:
   - `python -m tools.compile`
   - `python -m tools.scaffold`
   - `python -m tools.run`
+  - `python -m tools.watch`
 
 ### 1.3 Scaffolded project expectations
 README defines the scaffold outcome as including:
@@ -42,7 +44,7 @@ README defines the expected `pipeline.yaml` model:
   - `stages` ordered array (at least one stage)
 - Per-stage (core linear model):
   - `id` (required)
-  - `mode` (`whole_run` or `per_item`, default `whole_run`)
+  - `mode` (`whole_run`, `per_item`, or `human_required`, default `whole_run`)
   - `inputs` (default `[]`)
   - `outputs` (default `[]`)
   - `placeholder` (default `false`)
@@ -70,6 +72,7 @@ README defines the expected `pipeline.yaml` model:
 - `seedpipe-compile -> tools.compile:main`
 - `seedpipe-scaffold -> tools.scaffold:main`
 - `seedpipe-run -> tools.run:main`
+- `seedpipe-watch -> tools.watch:main`
 
 ## 2.2 `tools.compile` executable behavior
 
@@ -148,16 +151,22 @@ Compiler does not create or modify source stage implementation files (`src/stage
   - run manifest stores loop iteration, active item cohort, item attempts, and artifact index for deterministic resolution and resume context.
 - Manifest artifact index entries must remain relative to the run directory without `..` components so snapshots cannot escape the workspace.
 - Placeholder stages skip user imports; behavior is no-op success pattern by mode.
+- `human_required` stages:
+  - require `instructions` at compile-time (`summary`, `steps`, `done_when`).
+  - emit deterministic task packet artifacts and waiting marker.
+  - set stage status to `waiting_human` in run manifest and exit cleanly.
+  - on resume, validate completion proof (expected outputs exist + schema-valid) before continuing.
 
 ## 2.3 `tools.run` executable behavior
 
 ### Inputs
 - CLI args:
-  - `--run-id` (required)
+  - one of `--run-id` or `--resume` (required)
   - `--attempt` (default `1`)
   - `--generated-dir` (default `generated`)
   - `--inputs-dir` (default `artifacts/inputs`)
   - `--output-dir` (default `artifacts/outputs/<run_id>`)
+  - `--run-config-file` (optional JSON object, merged with CLI run id / resume selection)
 
 ### Preflight checks and setup
 - Requires `<generated-dir>/flow.py`.
@@ -197,6 +206,10 @@ Scaffold writes:
 - `spec/stages/<stage_id>/*.schema.json` (runtime output schema enforcement defaults)
 - `artifacts/inputs/.gitkeep`
 - `artifacts/outputs/.gitignore`
+- `inbox/.gitkeep`
+- `outbox/.gitkeep`
+- `Dockerfile`
+- `docker-compose.yml`
 - `src/__init__.py`
 - `src/stages/__init__.py`
 - starter `src/stages/{ingest,transform,publish}.py`
@@ -214,6 +227,58 @@ Scaffold writes:
 ## 2.5 Other executable script files
 - `tools/verify.py` exists as a wrapper entrypoint to `seedpipe.tools.verify:main`.
 - `tools/agent_loop.py` is a placeholder and currently has no operational loop logic.
+
+## 2.6 `tools.watch` executable behavior
+
+### Inputs
+- CLI args:
+  - `--pipeline` (`all` or specific pipeline id; default `all`)
+  - `--inbox-root` (default `inbox`)
+  - `--outbox-root` (default `outbox`)
+  - `--poll-seconds` (default `5`)
+  - `--runner` (`docker|local|auto`, default `auto`)
+  - `--once` (single scan and exit)
+  - `--max-concurrent` (default `1` bundle per pipeline per scan)
+  - `--stale-claim-seconds` (default `900`)
+  - `--generated-dir` (default `generated`)
+  - `--outputs-root` (default `artifacts/outputs`)
+  - `--inputs-root` (default `artifacts/inputs`)
+
+### Bundle and trigger contract
+- Canonical inbox path: `inbox/<pipeline_id>/<bundle_id>/`.
+- Bundle is considered runnable only when `_READY` exists.
+- Required bundle members:
+  - `manifest.json` (must parse as object)
+  - `payload/` directory
+- Optional members:
+  - `run_config.json`
+  - `trigger.json`
+- Invalid bundles are moved to `inbox/<pipeline_id>/.rejected/<bundle_id>/` with `.reason.json`.
+
+### Claim / process lifecycle
+- Claims by atomic rename into `inbox/<pipeline_id>/.claimed/<bundle_id>.<watcher_id>`.
+- Writes `.claim.json` immediately after claim.
+- Reclaims stale `.claimed/` entries older than threshold back into inbox.
+- Materializes payload snapshot into `artifacts/inputs/<run_id>/` (symlink-first on non-Windows, copy fallback).
+- Computes watcher `run_id` as `<pipeline_id>_<unix_timestamp>_<payload_hash>` where timestamp is claim time in Unix seconds and payload hash is derived from `payload/`.
+- Invokes local runtime (`tools.run:run_generated_flow`) by default fallback behavior.
+- If `runner` resolves to docker and a lock image is available, invokes `docker run ... python -m tools.run ...`.
+- Writes watcher status and event logs:
+  - `watcher/status.json`
+  - `watcher/events.ndjson`
+
+### Outbox publishing
+- If incoming manifest declares `downstreams` and `publish_artifacts`, watcher publishes to:
+  - `outbox/<downstream_pipeline>/<bundle_id>/`
+- Published bundle includes:
+  - `manifest.json`
+  - `run_config.json`
+  - `payload/*`
+  - `_READY`
+- Watcher also scans completed runs under `artifacts/outputs/*` on each polling cycle.
+- For runs whose manifest shows all stages `completed`, watcher publishes final-stage snapshot artifacts to:
+  - `outbox/<pipeline_id>/<bundle_id>/`
+- Run directories are marked with `.seedpipe_outbox_published.json` to keep outbox publication idempotent across repeated scans.
 
 ## 3) Runtime Module Specification
 
@@ -279,7 +344,7 @@ The scaffold tests assert:
 - `tools/agent_loop.py` does not yet implement control-loop behavior.
 - Contract validation beyond compile-time mapping exists in `seedpipe.tools.verify`, but this document focuses on core compile/run/scaffold and tested guarantees.
 - Verifier/runner typed contracts now model manifests, artifact refs, and defects using `TypedDict` + `Literal` aliases (`seedpipe.tools.types`) while preserving runtime behavior.
-- Human-gated stage orchestration (`mode=human_required`, task packets, `waiting_human` manifest state) is not implemented yet; planned behavior is documented in `docs/specs/future_system_spec.md` and `spec/phase1/human_required_stage_contract.md`.
+- Human-gated stage orchestration (`mode=human_required`) is implemented in compiler/runtime paths and covered by compile/run tests.
 
 ## 6) Operational Notes for Contributors
 

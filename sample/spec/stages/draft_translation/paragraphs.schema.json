@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["item_id", "lang", "text"],
+  "properties": {
+    "item_id": {"type": "string", "minLength": 1},
+    "lang": {"type": "string", "minLength": 2},
+    "text": {"type": "string", "minLength": 1}
+  }
+}

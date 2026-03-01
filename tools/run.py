@@ -65,6 +65,12 @@ def _purge_generated_modules() -> None:
             sys.modules.pop(module_name, None)
 
 
+def _purge_local_src_modules() -> None:
+    for module_name in list(sys.modules):
+        if module_name == "seedpipe.src" or module_name.startswith("seedpipe.src."):
+            sys.modules.pop(module_name, None)
+
+
 @contextmanager
 def _pushd(target_dir: Path) -> Iterator[None]:
     previous_dir = Path.cwd()
@@ -198,6 +204,7 @@ def run_generated_flow(
     _mount_inputs(run_output_dir, inputs_dir)
 
     _purge_generated_modules()
+    _purge_local_src_modules()
     _mount_generated_package(generated_dir)
     _mount_local_src_package(generated_dir.parent)
 
@@ -252,18 +259,31 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Run output directory (default: ./artifacts/outputs/<run-id>)",
     )
+    parser.add_argument(
+        "--run-config-file",
+        type=Path,
+        default=None,
+        help="Optional JSON file with run_config values (merged with CLI run-id/resume)",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     run_id = args.run_id if isinstance(args.run_id, str) and args.run_id else args.resume
+    run_config: dict[str, object] | None = None
+    if args.run_config_file is not None:
+        payload = json.loads(args.run_config_file.read_text())
+        if not isinstance(payload, dict):
+            raise ValueError(f"run config file must be a JSON object: {args.run_config_file}")
+        run_config = payload
     code = run_generated_flow(
         generated_dir=args.generated_dir,
         run_id=run_id,
         attempt=args.attempt,
         output_dir=args.output_dir,
         inputs_dir=args.inputs_dir,
+        run_config=run_config,
     )
     raise SystemExit(code)
 

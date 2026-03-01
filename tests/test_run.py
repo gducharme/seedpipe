@@ -75,6 +75,34 @@ def run(run_config: dict[str, object], attempt: int = 1) -> int:
             self.assertEqual(code, 0)
             self.assertEqual((output_dir / "config.txt").read_text(), "configured-run:t-1:4")
 
+    def test_run_generated_flow_run_config_is_merged_with_cli_run_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            generated_dir.mkdir()
+            inputs_dir = root / "artifacts" / "inputs"
+            inputs_dir.mkdir(parents=True)
+            (generated_dir / "flow.py").write_text(
+                """
+from pathlib import Path
+
+
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
+    Path('run-id.txt').write_text(str(run_config['run_id']))
+    return 0
+""".strip()
+            )
+            output_dir = root / "artifacts" / "outputs" / "merge-run"
+            code = run_generated_flow(
+                generated_dir=generated_dir,
+                run_id="merge-run",
+                output_dir=output_dir,
+                inputs_dir=inputs_dir,
+                run_config={"trace_id": "trace-1"},
+            )
+            self.assertEqual(code, 0)
+            self.assertEqual((output_dir / "run-id.txt").read_text(), "merge-run")
+
     def test_run_generated_flow_uses_default_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -275,6 +303,110 @@ def run_whole(ctx: StageContext) -> None:
 
             self.assertEqual(code, 0)
             self.assertTrue((output_dir / "items.jsonl").exists())
+
+    def test_run_generated_flow_reloads_seedpipe_src_modules_between_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            root_a = root / "a"
+            generated_a = root_a / "generated"
+            generated_stages_a = generated_a / "stages"
+            generated_stages_a.mkdir(parents=True)
+            inputs_a = root_a / "artifacts" / "inputs"
+            inputs_a.mkdir(parents=True)
+            src_stages_a = root_a / "src" / "stages"
+            src_stages_a.mkdir(parents=True)
+            (src_stages_a / "stage_a.py").write_text(
+                """
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    Path("a.txt").write_text("a")
+""".strip()
+            )
+            (generated_a / "flow.py").write_text(
+                """
+from seedpipe.generated.stages import stage_a
+from seedpipe.runtime.ctx import StageContext
+
+
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
+    ctx = StageContext.make_base(run_config=run_config).for_stage("stage_a", attempt=attempt)
+    stage_a.run_whole(ctx)
+    return 0
+""".strip()
+            )
+            (generated_stages_a / "__init__.py").write_text("from . import stage_a\n")
+            (generated_stages_a / "stage_a.py").write_text(
+                """
+from seedpipe.runtime.ctx import StageContext
+from seedpipe.src.stages import stage_a as impl
+
+
+def run_whole(ctx: StageContext) -> None:
+    impl.run_whole(ctx)
+""".strip()
+            )
+
+            root_b = root / "b"
+            generated_b = root_b / "generated"
+            generated_stages_b = generated_b / "stages"
+            generated_stages_b.mkdir(parents=True)
+            inputs_b = root_b / "artifacts" / "inputs"
+            inputs_b.mkdir(parents=True)
+            src_stages_b = root_b / "src" / "stages"
+            src_stages_b.mkdir(parents=True)
+            (src_stages_b / "stage_b.py").write_text(
+                """
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    Path("b.txt").write_text("b")
+""".strip()
+            )
+            (generated_b / "flow.py").write_text(
+                """
+from seedpipe.generated.stages import stage_b
+from seedpipe.runtime.ctx import StageContext
+
+
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
+    ctx = StageContext.make_base(run_config=run_config).for_stage("stage_b", attempt=attempt)
+    stage_b.run_whole(ctx)
+    return 0
+""".strip()
+            )
+            (generated_stages_b / "__init__.py").write_text("from . import stage_b\n")
+            (generated_stages_b / "stage_b.py").write_text(
+                """
+from seedpipe.runtime.ctx import StageContext
+from seedpipe.src.stages import stage_b as impl
+
+
+def run_whole(ctx: StageContext) -> None:
+    impl.run_whole(ctx)
+""".strip()
+            )
+
+            code_a = run_generated_flow(
+                generated_dir=generated_a,
+                run_id="run-a",
+                output_dir=root_a / "artifacts" / "outputs" / "run-a",
+                inputs_dir=inputs_a,
+            )
+            code_b = run_generated_flow(
+                generated_dir=generated_b,
+                run_id="run-b",
+                output_dir=root_b / "artifacts" / "outputs" / "run-b",
+                inputs_dir=inputs_b,
+            )
+
+            self.assertEqual(code_a, 0)
+            self.assertEqual(code_b, 0)
+            self.assertEqual((root_a / "artifacts" / "outputs" / "run-a" / "a.txt").read_text(), "a")
+            self.assertEqual((root_b / "artifacts" / "outputs" / "run-b" / "b.txt").read_text(), "b")
 
     def test_run_generated_flow_looping_reruns_failed_items_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

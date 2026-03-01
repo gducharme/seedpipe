@@ -1,0 +1,88 @@
+{
+  "pipeline_id": "localization-release",
+  "item_unit": "paragraph",
+  "determinism_policy": "strict",
+  "pipeline_type": "looping",
+  "max_loops": 3,
+  "params": {
+    "targets": {
+      "languages": ["fr", "de", "es"]
+    }
+  },
+  "stages": [
+    {
+      "id": "ingest_source",
+      "mode": "whole_run",
+      "outputs": ["items.jsonl"]
+    },
+    {
+      "id": "draft_translation",
+      "foreach": "params.targets.languages",
+      "key": "lang",
+      "mode": "per_item",
+      "inputs": ["items.jsonl"],
+      "outputs": [
+        {
+          "family": "pass1_translations",
+          "pattern": "pass1_pre/{lang}/paragraphs.jsonl",
+          "schema": "paragraphs.schema.json"
+        }
+      ],
+      "reentry": "retry_draft"
+    },
+    {
+      "id": "qa_pass",
+      "foreach": "params.targets.languages",
+      "key": "lang",
+      "mode": "per_item",
+      "inputs": [
+        {
+          "family": "pass1_translations",
+          "pattern": "pass1_pre/{lang}/paragraphs.jsonl",
+          "schema": "paragraphs.schema.json"
+        }
+      ],
+      "outputs": [
+        {
+          "family": "qa_rows",
+          "pattern": "qa/{lang}/rows.jsonl",
+          "schema": "qa-row.schema.json"
+        }
+      ],
+      "go_to": "retry_draft"
+    },
+    {
+      "id": "qa_finalize",
+      "foreach": "params.targets.languages",
+      "key": "lang",
+      "mode": "whole_run",
+      "inputs": [
+        {
+          "family": "qa_rows",
+          "pattern": "qa/{lang}/rows.jsonl",
+          "schema": "qa-row.schema.json"
+        }
+      ],
+      "outputs": [
+        {
+          "family": "qa_reports",
+          "pattern": "qa/{lang}/report.json",
+          "schema": "qa-report.schema.json"
+        }
+      ]
+    },
+    {
+      "id": "future_review",
+      "mode": "whole_run",
+      "placeholder": true,
+      "inputs": ["qa/fr/report.json", "qa/de/report.json", "qa/es/report.json"],
+      "outputs": []
+    },
+    {
+      "id": "publish",
+      "mode": "whole_run",
+      "inputs": ["qa/fr/report.json", "qa/de/report.json", "qa/es/report.json"],
+      "outputs": ["published_manifest.json"]
+    }
+  ]
+}
