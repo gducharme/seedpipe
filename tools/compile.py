@@ -17,7 +17,7 @@ from typing import Any, Literal
 COMPILER_VERSION = "phase1-mvp"
 DEFAULT_PIPELINE_PATH = Path("spec/phase1/pipeline.yaml")
 DEFAULT_CONTRACTS_DIR = Path("spec/phase1/contracts")
-ALT_CONTRACTS_DIR = Path("seedpipe/spec/phase1/contracts")
+ALT_CONTRACTS_DIR = Path("docs/spec/phase1/contracts")
 DEFAULT_OUTPUT_DIR = Path("generated")
 
 

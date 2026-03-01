@@ -17,4 +17,4 @@ Defects are emitted as one JSON file per failure under `defects/` with stable na
 
 Each defect uses `defect_version: phase1-v0`, `severity: error`, and includes location, hint, and evidence.
 
-Contract mappings are sourced from `seedpipe/spec/phase1/contracts/artifact_contracts.yaml`.
+Contract mappings are sourced from `docs/spec/phase1/contracts/artifact_contracts.yaml`.
