@@ -75,6 +75,34 @@ def run(run_config: dict[str, object], attempt: int = 1) -> int:
             self.assertEqual(code, 0)
             self.assertEqual((output_dir / "config.txt").read_text(), "configured-run:t-1:4")
 
+    def test_run_generated_flow_run_config_is_merged_with_cli_run_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            generated_dir.mkdir()
+            inputs_dir = root / "artifacts" / "inputs"
+            inputs_dir.mkdir(parents=True)
+            (generated_dir / "flow.py").write_text(
+                """
+from pathlib import Path
+
+
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
+    Path('run-id.txt').write_text(str(run_config['run_id']))
+    return 0
+""".strip()
+            )
+            output_dir = root / "artifacts" / "outputs" / "merge-run"
+            code = run_generated_flow(
+                generated_dir=generated_dir,
+                run_id="merge-run",
+                output_dir=output_dir,
+                inputs_dir=inputs_dir,
+                run_config={"trace_id": "trace-1"},
+            )
+            self.assertEqual(code, 0)
+            self.assertEqual((output_dir / "run-id.txt").read_text(), "merge-run")
+
     def test_run_generated_flow_uses_default_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

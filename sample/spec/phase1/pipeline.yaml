@@ -1,0 +1,76 @@
+pipeline_id: localization-release
+item_unit: paragraph
+determinism_policy: strict
+pipeline_type: looping
+max_loops: 3
+params:
+  targets:
+    languages: [fr, de, es]
+stages:
+  # whole_run + string outputs
+  - id: ingest_source
+    mode: whole_run
+    outputs:
+      - items.jsonl
+
+  # per_item + stage-level foreach/key + family/pattern/schema outputs + reentry
+  - id: draft_translation
+    foreach: params.targets.languages
+    key: lang
+    mode: per_item
+    inputs:
+      - items.jsonl
+    outputs:
+      - family: pass1_translations
+        pattern: pass1_pre/{lang}/paragraphs.jsonl
+        schema: paragraphs.schema.json
+    reentry: retry_draft
+
+  # whole_run + stage-level foreach/key + family/pattern/schema inputs/outputs + go_to loop reroute
+  - id: qa_pass
+    foreach: params.targets.languages
+    key: lang
+    mode: per_item
+    inputs:
+      - family: pass1_translations
+        pattern: pass1_pre/{lang}/paragraphs.jsonl
+        schema: paragraphs.schema.json
+    outputs:
+      - family: qa_rows
+        pattern: qa/{lang}/rows.jsonl
+        schema: qa-row.schema.json
+    go_to: retry_draft
+
+  # whole_run aggregation after per-item QA
+  - id: qa_finalize
+    foreach: params.targets.languages
+    key: lang
+    mode: whole_run
+    inputs:
+      - family: qa_rows
+        pattern: qa/{lang}/rows.jsonl
+        schema: qa-row.schema.json
+    outputs:
+      - family: qa_reports
+        pattern: qa/{lang}/report.json
+        schema: qa-report.schema.json
+
+  # placeholder stage (implemented feature) to model future/manual lane without runtime code
+  - id: future_review
+    mode: whole_run
+    placeholder: true
+    inputs:
+      - qa/fr/report.json
+      - qa/de/report.json
+      - qa/es/report.json
+    outputs: []
+
+  # whole_run + string inputs/outputs
+  - id: publish
+    mode: whole_run
+    inputs:
+      - qa/fr/report.json
+      - qa/de/report.json
+      - qa/es/report.json
+    outputs:
+      - published_manifest.json

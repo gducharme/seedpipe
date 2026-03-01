@@ -31,10 +31,14 @@ class ScaffoldTests(unittest.TestCase):
             outputs_gitignore = root / "artifacts/outputs/.gitignore"
             self.assertTrue(outputs_gitignore.exists())
             self.assertEqual(outputs_gitignore.read_text(), "*\n!.gitignore\n")
+            self.assertTrue((root / "Dockerfile").exists())
+            self.assertTrue((root / "docker-compose.yml").exists())
+            self.assertTrue((root / "inbox/.gitkeep").exists())
+            self.assertTrue((root / "outbox/.gitkeep").exists())
             self.assertTrue((root / "src" / "stages" / "ingest.py").exists())
             self.assertTrue((root / "src" / "stages" / "transform.py").exists())
             self.assertTrue((root / "src" / "stages" / "publish.py").exists())
-            self.assertGreaterEqual(len(created), 13)
+            self.assertGreaterEqual(len(created), 17)
 
             result = compile_pipeline(
                 CompilePaths(

@@ -1,6 +1,6 @@
-# Human-Required Stage Contract (Future)
+# Human-Required Stage Contract
 
-Status: Proposed, not implemented in current runtime.
+Status: Implemented in current compiler/runtime behavior.
 
 ## Purpose
 Define deterministic pause/resume behavior for stages that require human intervention while preserving lineage and artifact truth.
@@ -35,10 +35,10 @@ When the runner reaches `mode: human_required`:
      - `expected_outputs`
      - `validation_status`
      - `blocked_at`
-6. Exit cleanly in waiting state.
+6. Exit cleanly in waiting state (exit code `20`).
 
 ## Resume contract
-On `seedpipe-run --resume <run_id>`:
+On `seedpipe-run --resume <run_id>` (or rerun against the same `run_id`):
 1. Detect waiting stage from run manifest.
 2. Verify completion proof:
    - all expected outputs exist
@@ -78,7 +78,7 @@ Markdown is a deterministic rendering of the same payload for human operators.
 - Schema-invalid outputs on resume: remain waiting with validation detail.
 - Pipelines without `human_required` stages: no behavior change.
 
-## Acceptance scenarios
+## Acceptance scenarios (implemented)
 - First entry to manual stage emits task packet + marker and sets waiting state.
 - Resume blocks until completion proof passes.
 - Resume proceeds deterministically after valid completion proof.

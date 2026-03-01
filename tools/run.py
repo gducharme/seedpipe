@@ -252,18 +252,31 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Run output directory (default: ./artifacts/outputs/<run-id>)",
     )
+    parser.add_argument(
+        "--run-config-file",
+        type=Path,
+        default=None,
+        help="Optional JSON file with run_config values (merged with CLI run-id/resume)",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     run_id = args.run_id if isinstance(args.run_id, str) and args.run_id else args.resume
+    run_config: dict[str, object] | None = None
+    if args.run_config_file is not None:
+        payload = json.loads(args.run_config_file.read_text())
+        if not isinstance(payload, dict):
+            raise ValueError(f"run config file must be a JSON object: {args.run_config_file}")
+        run_config = payload
     code = run_generated_flow(
         generated_dir=args.generated_dir,
         run_id=run_id,
         attempt=args.attempt,
         output_dir=args.output_dir,
         inputs_dir=args.inputs_dir,
+        run_config=run_config,
     )
     raise SystemExit(code)
 

@@ -1,0 +1,48 @@
+{
+  "artifact_index": {},
+  "created_at": "1970-01-01T00:00:00+00:00",
+  "failure_stage_id": null,
+  "loop_iteration": 1,
+  "manifest_version": "phase1-run-resume-v1",
+  "pipeline_id": "localization-release",
+  "run_id": "",
+  "stages": [
+    {
+      "attempt": 0,
+      "stage_id": "ingest_source",
+      "status": "pending",
+      "updated_at": "1970-01-01T00:00:00+00:00"
+    },
+    {
+      "attempt": 0,
+      "stage_id": "draft_translation",
+      "status": "pending",
+      "updated_at": "1970-01-01T00:00:00+00:00"
+    },
+    {
+      "attempt": 0,
+      "stage_id": "qa_pass",
+      "status": "pending",
+      "updated_at": "1970-01-01T00:00:00+00:00"
+    },
+    {
+      "attempt": 0,
+      "stage_id": "qa_finalize",
+      "status": "pending",
+      "updated_at": "1970-01-01T00:00:00+00:00"
+    },
+    {
+      "attempt": 0,
+      "stage_id": "future_review",
+      "status": "pending",
+      "updated_at": "1970-01-01T00:00:00+00:00"
+    },
+    {
+      "attempt": 0,
+      "stage_id": "publish",
+      "status": "pending",
+      "updated_at": "1970-01-01T00:00:00+00:00"
+    }
+  ],
+  "updated_at": "1970-01-01T00:00:00+00:00"
+}

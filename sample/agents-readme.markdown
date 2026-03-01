@@ -39,10 +39,8 @@ without changing the core model.
 
 ## Roadmap tracking docs
 
-- Phase status tracking (implemented + remaining scope): `docs/phase3_agent_control_plane.md`
-- Current implemented system spec: `docs/specs/current_system_spec.md`
-- Future-only backlog/spec: `docs/specs/future_system_spec.md`
-- Human-required stage contract reference: `spec/phase1/human_required_stage_contract.md`
+- Phase 4 agent-operable control plane tracking doc: `docs/phase3_agent_control_plane.md`
+- Future human-gated stage contract (proposed): `spec/phase1/human_required_stage_contract.md`
 
 ## Install from a local path
 
@@ -107,10 +105,8 @@ This creates:
 - `spec/phase1/pipeline.yaml`
 - `spec/phase1/contracts/*.schema.json`
 - `spec/stages/<stage_id>/*.schema.json` (default runtime-enforced stage output schemas)
-- `Dockerfile` and `docker-compose.yml` for long-running watcher execution
 - `artifacts/inputs/.gitkeep`
 - `artifacts/outputs/.gitkeep`
-- `inbox/.gitkeep` and `outbox/.gitkeep`
 - starter stage implementations in `src/stages/*.py`
 
 To scaffold somewhere else:
@@ -252,38 +248,16 @@ stages:
   - id: qa_pass
     foreach: params.targets.languages
     key: lang
-    mode: per_item
+    mode: whole_run
     inputs:
       - family: pass1_translations
         pattern: pass1_pre/{lang}/paragraphs.jsonl
         schema: paragraphs.schema.json
     outputs:
-      - family: qa_rows
-        pattern: qa/{lang}/rows.jsonl
-        schema: qa-row.schema.json
-    go_to: retry_draft
-
-  - id: qa_finalize
-    foreach: params.targets.languages
-    key: lang
-    mode: whole_run
-    inputs:
-      - family: qa_rows
-        pattern: qa/{lang}/rows.jsonl
-        schema: qa-row.schema.json
-    outputs:
       - family: qa_reports
         pattern: qa/{lang}/report.json
         schema: qa-report.schema.json
-
-  - id: future_review
-    mode: whole_run
-    placeholder: true
-    inputs:
-      - qa/fr/report.json
-      - qa/de/report.json
-      - qa/es/report.json
-    outputs: []
+    go_to: retry_draft
 
   - id: publish
     mode: whole_run
@@ -340,7 +314,6 @@ Each stage entry supports:
 - `mode` *(enum, optional, default: `whole_run`)*
   - `whole_run`: runs once via `run_whole(ctx)`.
   - `per_item`: iterates items from `items.jsonl`, runs `run_item(ctx, item)` for each item, and appends item-state transitions.
-  - `human_required`: runtime emits waiting/task artifacts and exits cleanly until resume proof is satisfied.
 
 - `inputs` *(array of strings, optional, default: `[]`)*
   - Declares artifacts required before stage execution.
@@ -517,7 +490,9 @@ Use:
 
 `seedpipe-run` will error if the run output directory already exists (including the default `./artifacts/outputs/<run-id>` path), and will error if the inputs directory does not exist.
 
-### Human-required stage resume contract (implemented)
+### Human-required stage resume contract (future)
+
+The following behavior is specified for a proposed future extension and is not implemented in current runtime behavior.
 
 For a stage declared with `mode: human_required`, the runner is expected to:
 - emit task packet artifacts:
@@ -575,7 +550,6 @@ Key behaviors:
 - computes run IDs as `<pipeline_id>_<unix_timestamp>_<payload_hash>`, where timestamp is claim time and hash is derived from payload files.
 - runs with Docker when configured/available, otherwise falls back to local runner.
 - writes watcher state to `watcher/status.json` and append-only events to `watcher/events.ndjson`.
-- publishes final-stage artifacts from completed runs to `outbox/<pipeline_id>/<bundle_id>/` and records idempotent publish markers in run directories.
 - publishes downstream bundles to `outbox/<downstream_pipeline>/<bundle_id>/` when `manifest.json` declares `downstreams` and `publish_artifacts`.
 
 ## Use the compiler from Python

@@ -1,0 +1,224 @@
+{
+  "artifact_producers": {
+    "items.jsonl": "ingest_source",
+    "pass1_pre/de/paragraphs.jsonl": "draft_translation",
+    "pass1_pre/es/paragraphs.jsonl": "draft_translation",
+    "pass1_pre/fr/paragraphs.jsonl": "draft_translation",
+    "published_manifest.json": "publish",
+    "qa/de/report.json": "qa_finalize",
+    "qa/de/rows.jsonl": "qa_pass",
+    "qa/es/report.json": "qa_finalize",
+    "qa/es/rows.jsonl": "qa_pass",
+    "qa/fr/report.json": "qa_finalize",
+    "qa/fr/rows.jsonl": "qa_pass"
+  },
+  "determinism_policy": "strict",
+  "item_unit": "paragraph",
+  "max_loops": 3,
+  "pipeline_id": "localization-release",
+  "pipeline_type": "looping",
+  "stages": [
+    {
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "items.jsonl",
+          "pattern": "items.jsonl"
+        }
+      ],
+      "go_to": null,
+      "inputs": [],
+      "instructions": null,
+      "keys": [],
+      "mode": "whole_run",
+      "outputs": [
+        "items.jsonl"
+      ],
+      "placeholder": false,
+      "reentry": null,
+      "stage_id": "ingest_source"
+    },
+    {
+      "expected_outputs": [
+        {
+          "family": "pass1_translations",
+          "keys": {
+            "lang": "fr"
+          },
+          "path": "pass1_pre/fr/paragraphs.jsonl",
+          "pattern": "pass1_pre/{lang}/paragraphs.jsonl",
+          "schema": "paragraphs.schema.json"
+        },
+        {
+          "family": "pass1_translations",
+          "keys": {
+            "lang": "de"
+          },
+          "path": "pass1_pre/de/paragraphs.jsonl",
+          "pattern": "pass1_pre/{lang}/paragraphs.jsonl",
+          "schema": "paragraphs.schema.json"
+        },
+        {
+          "family": "pass1_translations",
+          "keys": {
+            "lang": "es"
+          },
+          "path": "pass1_pre/es/paragraphs.jsonl",
+          "pattern": "pass1_pre/{lang}/paragraphs.jsonl",
+          "schema": "paragraphs.schema.json"
+        }
+      ],
+      "go_to": null,
+      "inputs": [
+        "items.jsonl"
+      ],
+      "instructions": null,
+      "keys": [],
+      "mode": "per_item",
+      "outputs": [
+        "pass1_pre/fr/paragraphs.jsonl",
+        "pass1_pre/de/paragraphs.jsonl",
+        "pass1_pre/es/paragraphs.jsonl"
+      ],
+      "placeholder": false,
+      "reentry": "retry_draft",
+      "stage_id": "draft_translation"
+    },
+    {
+      "expected_outputs": [
+        {
+          "family": "qa_rows",
+          "keys": {
+            "lang": "fr"
+          },
+          "path": "qa/fr/rows.jsonl",
+          "pattern": "qa/{lang}/rows.jsonl",
+          "schema": "qa-row.schema.json"
+        },
+        {
+          "family": "qa_rows",
+          "keys": {
+            "lang": "de"
+          },
+          "path": "qa/de/rows.jsonl",
+          "pattern": "qa/{lang}/rows.jsonl",
+          "schema": "qa-row.schema.json"
+        },
+        {
+          "family": "qa_rows",
+          "keys": {
+            "lang": "es"
+          },
+          "path": "qa/es/rows.jsonl",
+          "pattern": "qa/{lang}/rows.jsonl",
+          "schema": "qa-row.schema.json"
+        }
+      ],
+      "go_to": "retry_draft",
+      "inputs": [
+        "pass1_pre/fr/paragraphs.jsonl",
+        "pass1_pre/de/paragraphs.jsonl",
+        "pass1_pre/es/paragraphs.jsonl"
+      ],
+      "instructions": null,
+      "keys": [],
+      "mode": "per_item",
+      "outputs": [
+        "qa/fr/rows.jsonl",
+        "qa/de/rows.jsonl",
+        "qa/es/rows.jsonl"
+      ],
+      "placeholder": false,
+      "reentry": null,
+      "stage_id": "qa_pass"
+    },
+    {
+      "expected_outputs": [
+        {
+          "family": "qa_reports",
+          "keys": {
+            "lang": "fr"
+          },
+          "path": "qa/fr/report.json",
+          "pattern": "qa/{lang}/report.json",
+          "schema": "qa-report.schema.json"
+        },
+        {
+          "family": "qa_reports",
+          "keys": {
+            "lang": "de"
+          },
+          "path": "qa/de/report.json",
+          "pattern": "qa/{lang}/report.json",
+          "schema": "qa-report.schema.json"
+        },
+        {
+          "family": "qa_reports",
+          "keys": {
+            "lang": "es"
+          },
+          "path": "qa/es/report.json",
+          "pattern": "qa/{lang}/report.json",
+          "schema": "qa-report.schema.json"
+        }
+      ],
+      "go_to": null,
+      "inputs": [
+        "qa/fr/rows.jsonl",
+        "qa/de/rows.jsonl",
+        "qa/es/rows.jsonl"
+      ],
+      "instructions": null,
+      "keys": [],
+      "mode": "whole_run",
+      "outputs": [
+        "qa/fr/report.json",
+        "qa/de/report.json",
+        "qa/es/report.json"
+      ],
+      "placeholder": false,
+      "reentry": null,
+      "stage_id": "qa_finalize"
+    },
+    {
+      "expected_outputs": [],
+      "go_to": null,
+      "inputs": [
+        "qa/fr/report.json",
+        "qa/de/report.json",
+        "qa/es/report.json"
+      ],
+      "instructions": null,
+      "keys": [],
+      "mode": "whole_run",
+      "outputs": [],
+      "placeholder": true,
+      "reentry": null,
+      "stage_id": "future_review"
+    },
+    {
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "published_manifest.json",
+          "pattern": "published_manifest.json"
+        }
+      ],
+      "go_to": null,
+      "inputs": [
+        "qa/fr/report.json",
+        "qa/de/report.json",
+        "qa/es/report.json"
+      ],
+      "instructions": null,
+      "keys": [],
+      "mode": "whole_run",
+      "outputs": [
+        "published_manifest.json"
+      ],
+      "placeholder": false,
+      "reentry": null,
+      "stage_id": "publish"
+    }
+  ]
+}

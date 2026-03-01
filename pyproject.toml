@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "seedpipe"
-version = "0.1.21"
+version = "0.1.22"
 description = "Seedpipe compiler and generated pipeline runtime helpers"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,6 +21,7 @@ dev = [
 seedpipe-compile = "tools.compile:main"
 seedpipe-scaffold = "tools.scaffold:main"
 seedpipe-run = "tools.run:main"
+seedpipe-watch = "tools.watch:main"
 
 [tool.setuptools]
 include-package-data = true

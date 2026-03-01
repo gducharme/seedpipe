@@ -316,6 +316,34 @@ BASE_TEMPLATES = {
     Path("spec/stages/publish/manifest.schema.json"): STAGE_MANIFEST_SCHEMA_TEMPLATE,
     Path("artifacts/inputs/.gitkeep"): "",
     Path("artifacts/outputs/.gitignore"): "*\n!.gitignore\n",
+    Path("inbox/.gitkeep"): "",
+    Path("outbox/.gitkeep"): "",
+    Path("Dockerfile"): """FROM python:3.12-slim
+
+WORKDIR /workspace
+
+COPY . /workspace
+
+RUN pip install --no-cache-dir -e .
+
+CMD ["sh", "-lc", "seedpipe-compile && seedpipe-watch --pipeline all --poll-seconds 5 --inbox-root /inbox --inputs-root /artifacts/inputs --outputs-root /artifacts/outputs --outbox-root /workspace/outbox"]
+""",
+    Path("docker-compose.yml"): """version: "3.9"
+services:
+  seedpipe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+      - ./artifacts:/artifacts
+      - ./inbox:/inbox
+    command:
+      - sh
+      - -lc
+      - seedpipe-compile && seedpipe-watch --pipeline all --poll-seconds 5 --inbox-root /inbox --inputs-root /artifacts/inputs --outputs-root /artifacts/outputs --outbox-root /workspace/outbox
+""",
     Path("src/__init__.py"): "",
     Path("src/stages/__init__.py"): "",
     Path("src/stages/ingest.py"): """from __future__ import annotations

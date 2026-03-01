@@ -96,48 +96,15 @@ The following scenarios define acceptance for implementation work derived from t
 - This document is intentionally forward-looking and does not modify `docs/specs/current_system_spec.md`.
 - Future implementation work should reference requirement IDs in design docs, PRs, tests, and migration plans.
 - When functionality is shipped, corresponding sections should be promoted into current-system specs with verified behavior.
+- Current repository now ships:
+  - a lightweight polling inbox/outbox watcher (`seedpipe-watch`) for event-driven runs,
+  - canonical inbox/outbox bundle conventions,
+  - and `human_required` compile/runtime orchestration.
+- Remaining future work should build on those primitives rather than introducing queue/database dependencies.
 
-## 7. Human-Required Stage Orchestration (Future)
+## 7. Delivered Features Removed from Future Backlog
 
-### 7.1 New normative requirements
-- `FR-026` Seedpipe SHALL support `mode: human_required` as a future stage execution mode for deterministic human-gated transitions.
-- `FR-027` A `human_required` stage SHALL declare an `instructions` object with:
-  - `summary: string`
-  - `steps: string[]`
-  - `done_when: string[]`
-  - optional `troubleshooting: string[]`
-  - optional `validation_command: string`
-- `FR-028` When a run reaches a `human_required` stage, runtime SHALL:
-  - validate declared inputs
-  - emit a task packet JSON artifact
-  - emit a rendered task packet Markdown artifact
-  - write a waiting marker artifact
-  - update run manifest stage status to `waiting_human`
-  - exit cleanly without executing downstream stages
-- `FR-029` Canonical waiting artifacts SHALL be:
-  - `runs/<run_id>/tasks/<stage_id>.task.json`
-  - `runs/<run_id>/tasks/<stage_id>.md`
-  - `runs/<run_id>/WAITING_HUMAN.<stage_id>`
-- `FR-030` Stage manifest rows SHALL support `status=waiting_human` and an optional `waiting_human` object with:
-  - `task_id`
-  - `task_packet_json`
-  - `task_packet_md`
-  - `marker_path`
-  - `expected_outputs`
-  - `validation_status`
-  - `blocked_at`
-- `FR-031` Resume semantics SHALL require completion proof from artifact truth; human affirmation alone SHALL be insufficient.
-- `FR-032` Completion proof minimum SHALL be:
-  - all expected outputs exist
-  - expected outputs validate against declared schemas
-- `FR-033` On successful proof, runtime SHALL clear or retire waiting marker state, set stage to `completed`, and continue execution.
-- `FR-034` On failed proof, runtime SHALL keep stage in `waiting_human`, persist validation details, and exit cleanly.
-- `FR-035` Task packet content SHALL be deterministic for identical inputs/configuration, excluding explicit timestamp fields.
-
-### 7.2 Acceptance criteria for human-required stages
-- `AC-007` Compile rejects `human_required` stage when `instructions` is missing required fields.
-- `AC-008` First run reaching `human_required` emits `.task.json`, `.md`, waiting marker, and `waiting_human` manifest status.
-- `AC-009` Resume with missing outputs remains blocked in `waiting_human`.
-- `AC-010` Resume with schema-invalid outputs remains blocked with recorded validation status.
-- `AC-011` Resume with valid outputs advances stage to `completed` and runs subsequent stages.
-- `AC-012` Pipelines without `human_required` stages remain behaviorally unchanged.
+The following previously proposed items are now implemented and tracked in `docs/specs/current_system_spec.md`:
+- Event-driven filesystem triggering baseline (`seedpipe-watch`, inbox claim/snapshot flow).
+- Canonical outbox publish convention for downstream handoff.
+- `mode: human_required` stage validation, task packet emission, waiting state, and resume proof checks.

@@ -1,6 +1,6 @@
 # Seedpipe Roadmap Tracking: Phase 3 Agent-Operable Control Plane
 
-This document tracks the intended Phase 3 target as the **minimal agent-operable control plane** that unifies deterministic execution, resumable failure handling, event-driven triggering, fan-out composability, and machine-readable observability.
+This document tracks Phase 1/2/3 status with a strict split between **implemented now** and **remaining target scope**.
 
 Core invariant to preserve:
 
@@ -23,13 +23,17 @@ Core invariant to preserve:
 - No forward artifact references.
 - `generated/` is compiler-owned.
 - `rerun = resume` based on artifact truth.
+- `whole_run`, `per_item`, and `human_required` stage modes.
+- Optional schema-enforced output contracts.
 
 ### Required Artifacts (per run)
 
 ```text
 artifacts/
   outputs/<run-id>/
-    <stage outputs>
+    .seedpipe_run_manifest.json
+    artifacts/item_state.jsonl   # when per-item stages execute
+    <stage outputs and loop snapshots>
 ```
 
 ---
@@ -41,61 +45,17 @@ artifacts/
 - Per-item granular failure handling.
 - Append-only item state log.
 - Deterministic resume.
-- Structured defect reporting.
+- Manifest-driven resume from failure stage.
+- Loop reroute semantics (`reentry` + `go_to`) with bounded `max_loops`.
 
-### Required Artifacts
+### Implemented Phase 2 Artifacts
 
 ```text
 artifacts/
   outputs/<run-id>/
-    status.json
-    run_meta.json
-    item_states.ndjson
-    defects/
-      <stage>/<item>.json
+    .seedpipe_run_manifest.json
+    artifacts/item_state.jsonl
 ```
-
-### Artifact Definitions
-
-#### `status.json`
-Machine-readable run state:
-
-```json
-{
-  "run_id": "...",
-  "pipeline_id": "...",
-  "state": "running | failed | completed",
-  "current_stage": "...",
-  "stages": {},
-  "items": { "total": 100, "completed": 87, "failed": 3 },
-  "started_at": "...",
-  "updated_at": "..."
-}
-```
-
-#### `run_meta.json`
-Provenance and reproducibility:
-
-```json
-{
-  "pipeline_spec_hash": "...",
-  "generated_hash": "...",
-  "src_git_commit": "...",
-  "run_config_hash": "...",
-  "input_bundle_hash": "...",
-  "compiler_version": "..."
-}
-```
-
-#### `item_states.ndjson`
-Append-only item transition log:
-
-```json
-{ "stage": "transform", "item_id": "42", "status": "completed", "attempt": 1 }
-```
-
-#### `defects/<stage>/<item>.json`
-Structured failure envelope.
 
 ### Phase 2 Extension: Optional Output Schema Validation
 Pipeline authors may optionally attach JSON Schema validation to stage outputs.
@@ -107,46 +67,26 @@ Pipeline authors may optionally attach JSON Schema validation to stage outputs.
 
 ---
 
-## Phase 3 Target — Agent Substrate + Composable Runtime
+## Phase 3 Status — Delivered
 
-Phase 3 is the completion of the agent substrate, not a broad feature grab.
+The following Phase 3 items are implemented:
+- Event-driven triggering with polling watcher (`seedpipe-watch`).
+- Canonical inbox claim flow:
+  - `inbox/<pipeline_id>/<bundle_id>/`
+  - atomic claim into `.claimed/`
+  - stale claim reclaim
+- Immutable input snapshot for watcher-triggered runs:
+  - `artifacts/inputs/<run_id>/`
+- Canonical downstream publish convention:
+  - `outbox/<downstream-pipeline>/<bundle-id>/`
+- Watcher state/telemetry artifacts:
+  - `watcher/status.json`
+  - `watcher/events.ndjson`
+- Run config JSON ingestion (`seedpipe-run --run-config-file`).
 
-### 1) Event-Driven Triggering
+## Remaining Phase 3 Target Scope
 
-Pipeline auto-starts when a valid input bundle lands.
-
-#### Inbox Convention
-
-```text
-inbox/<pipeline_id>/<bundle_id>/
-```
-
-#### Claim + Snapshot
-- Claim with atomic rename or lockfile.
-- Snapshot into immutable run inputs:
-
-```text
-artifacts/inputs/<run-id>/
-```
-
-#### Trigger Metadata (`run_meta.json`)
-
-```json
-{
-  "trigger": {
-    "type": "filesystem",
-    "source_bundle": "...",
-    "claimed_at": "..."
-  }
-}
-```
-
-#### Invariants
-- Bundle validates before claim.
-- Claim is atomic.
-- Inputs immutable after claim.
-
-### 2) Fan-Out / Parallelization (Composable Runs)
+### 1) Fan-Out / Parallelization (Composable Runs)
 
 One upstream artifact can spawn N parameterized child runs.
 
@@ -174,19 +114,7 @@ artifacts/
 - Resume checks child state before spawning.
 - Child run IDs are deterministic from input bundle hash + run config + fan-out parameter.
 
-### 3) `run_config.json` as First-Class Input
-
-Required per run:
-
-```text
-run_config.json
-```
-
-- Included in provenance hash.
-- Available to all stages.
-- Sole sanctioned runtime mutation surface for per-run behavior.
-
-### 4) Observability + Resource Reporting
+### 2) Observability + Resource Reporting
 
 Required artifact:
 
@@ -215,7 +143,7 @@ for time-series snapshots.
 - Reporting writes are atomic.
 - Reporting survives crashes safely.
 
-### 5) Cancellation + Control Plane
+### 3) Cancellation + Control Plane
 
 Cancellation signal:
 
@@ -241,7 +169,7 @@ An agent only needs to:
 1. Write inputs.
 2. Write `run_config.json`.
 3. Execute `seedpipe-run`.
-4. Inspect `status.json`, `defects/`, `run_meta.json`, and `manifest.json`.
+4. Inspect `.seedpipe_run_manifest.json`, `artifacts/item_state.jsonl`, and watcher logs when triggered via inbox.
 5. Patch `src/` or `spec/`.
 6. Recompile.
 

@@ -1,0 +1,15 @@
+version: "3.9"
+services:
+  seedpipe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+      - ./artifacts:/artifacts
+      - ./inbox:/inbox
+    command:
+      - sh
+      - -lc
+      - seedpipe-compile && seedpipe-watch --pipeline all --poll-seconds 5 --inbox-root /inbox --inputs-root /artifacts/inputs --outputs-root /artifacts/outputs --outbox-root /workspace/outbox
