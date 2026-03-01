@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Verify entrypoint."""
+"""CLI wrapper for verifier.
+
+Relationship:
+- ``tools/verify.py`` is the thin command entrypoint used from repository root
+  and module invocation (``python -m tools.verify``).
+- ``seedpipe/tools/verify.py`` contains the reusable verifier implementation.
+"""
 
 from __future__ import annotations
 

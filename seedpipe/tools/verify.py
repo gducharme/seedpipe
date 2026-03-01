@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Verifier implementation.
+
+This module contains the core verification logic and is invoked by the thin CLI
+wrapper at ``tools/verify.py``.
+"""
+
 import argparse
 import datetime as dt
 import hashlib
@@ -16,7 +22,7 @@ from seedpipe.tools.runner import run_fixture_allow_failure, run_fixture_once
 class Verifier:
     def __init__(self, fixture: str, max_errors: int = 20) -> None:
         self.fixture_dir = Path("seedpipe/fixtures/phase1") / fixture
-        self.contracts_dir = Path("seedpipe/spec/phase1/contracts")
+        self.contracts_dir = Path("docs/spec/phase1/contracts")
         self.defects_dir = Path("defects")
         self.max_errors = max_errors
         self.schemas, self.artifact_map = load_schema_store(self.contracts_dir)
