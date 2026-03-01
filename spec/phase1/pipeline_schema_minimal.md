@@ -9,6 +9,7 @@ No branching, no retries, no parallelism. Just an ordered list of stages.
 - Each stage declares an **execution mode**:
   - `whole_run` = stage runs once for the run
   - `per_item` = stage runs once per item (item = the generic unit)
+  - `human_required` = runner emits a task packet and waits for manual completion proof before continuing
 - Determinism policy exists at pipeline level; **defaults to strict**.
 - Optional dependencies are allowed as **soft requirements** (for future integrations), but must not change semantics when absent.
 
@@ -42,7 +43,7 @@ No branching, no retries, no parallelism. Just an ordered list of stages.
 - `id` *(string, required)*
   Unique within `stages`.
 
-- `mode` *(enum: `whole_run` | `per_item`, required)*
+- `mode` *(enum: `whole_run` | `per_item` | `human_required`, required)*
 
 - `inputs` *(list[string], optional; default `[]`)*
   Artifact names required to run this stage.
@@ -53,6 +54,16 @@ No branching, no retries, no parallelism. Just an ordered list of stages.
 - `placeholder` *(bool, optional; default `false`)*
   When `true`, the stage is a documented no-op placeholder. It bypasses forward-input dependency checks and does not execute any implementation code.
 
+- `instructions` *(object, required when `mode=human_required`)*
+  Manual task packet metadata for human-gated stages.
+  Required fields:
+  - `summary` *(string)*
+  - `steps` *(list[string], non-empty)*
+  - `done_when` *(list[string], non-empty)*
+  Optional fields:
+  - `troubleshooting` *(list[string])*
+  - `validation_command` *(string)*
+
 #### Minimal validation rules
 1. `stages` must be non-empty and **ordered** as written.
 2. Stage `id` values must be unique.
@@ -61,6 +72,7 @@ No branching, no retries, no parallelism. Just an ordered list of stages.
 4. No duplicate artifact names within a single `outputs[]`.
 5. `placeholder` must be a boolean when present.
 6. Artifact names are simple strings (recommended: filenames like `items.jsonl`).
+7. If `mode=human_required`, `instructions.summary`, `instructions.steps`, and `instructions.done_when` are required.
 
 ---
 
@@ -97,4 +109,27 @@ stages:
     mode: whole_run
     inputs: [reviewed.json]
     outputs: [published.marker]
+```
+
+## Example `human_required` stage (future extension)
+
+```yaml
+stages:
+  - id: ingest
+    mode: whole_run
+    outputs: [items.jsonl]
+
+  - id: align_quotes
+    mode: human_required
+    inputs: [items.jsonl]
+    outputs: [quote_map.json]
+    instructions:
+      summary: "Align quotes and anchors for mapping."
+      steps:
+        - "Run: python scripts/build_quote_map.py --in runs/{run_id}/items.jsonl --out runs/{run_id}/quote_map.json"
+        - "Open quote_map.json and fix any 'AMBIGUOUS' entries"
+        - "Re-run: python scripts/validate_quote_map.py runs/{run_id}/quote_map.json"
+      done_when:
+        - "validate_quote_map exits 0"
+      validation_command: "python scripts/validate_quote_map.py runs/{run_id}/quote_map.json"
 ```

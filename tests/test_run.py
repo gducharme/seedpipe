@@ -602,6 +602,116 @@ def run_whole(ctx) -> None:
             self.assertEqual(code, 0)
             self.assertTrue((output_dir / "manifest.json").exists())
 
+    def test_run_generated_flow_pauses_and_resumes_human_required_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            contracts_dir = root / "contracts"
+            contracts_dir.mkdir()
+            pipeline_path = root / "pipeline.yaml"
+            inputs_dir = root / "artifacts" / "inputs"
+            inputs_dir.mkdir(parents=True)
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "human-required-pipe",
+                        "item_unit": "item",
+                        "determinism_policy": "strict",
+                        "stages": [
+                            {"id": "ingest", "mode": "whole_run", "inputs": [], "outputs": ["items.jsonl"]},
+                            {
+                                "id": "align_quotes",
+                                "mode": "human_required",
+                                "inputs": ["items.jsonl"],
+                                "outputs": ["quote_map.json"],
+                                "instructions": {
+                                    "summary": "Align quotes and anchors for mapping.",
+                                    "steps": [
+                                        "Run: python scripts/build_quote_map.py --in runs/{run_id}/items.jsonl --out runs/{run_id}/quote_map.json",
+                                        "Open quote_map.json and fix any 'AMBIGUOUS' entries",
+                                    ],
+                                    "done_when": ["validate_quote_map exits 0"],
+                                    "validation_command": "python scripts/validate_quote_map.py runs/{run_id}/quote_map.json",
+                                },
+                            },
+                            {"id": "publish", "mode": "whole_run", "inputs": ["quote_map.json"], "outputs": ["manifest.json"]},
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=generated_dir,
+                )
+            )
+
+            src_stages_dir = root / "src" / "stages"
+            src_stages_dir.mkdir(parents=True)
+            (src_stages_dir / "ingest.py").write_text(
+                """
+import json
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    Path("items.jsonl").write_text(json.dumps({"item_id": "1"}) + "\\n")
+""".strip()
+            )
+            (src_stages_dir / "publish.py").write_text(
+                """
+import json
+from pathlib import Path
+
+
+def run_whole(ctx) -> None:
+    Path("manifest.json").write_text(json.dumps({"status": "ok"}))
+""".strip()
+            )
+
+            output_dir = root / "artifacts" / "outputs" / "human-required-run"
+            code = run_generated_flow(
+                generated_dir=generated_dir,
+                run_id="human-required-run",
+                output_dir=output_dir,
+                inputs_dir=inputs_dir,
+            )
+            self.assertEqual(code, 20)
+
+            task_json = output_dir / "runs" / "human-required-run" / "tasks" / "align_quotes.task.json"
+            task_md = output_dir / "runs" / "human-required-run" / "tasks" / "align_quotes.md"
+            marker = output_dir / "runs" / "human-required-run" / "WAITING_HUMAN.align_quotes"
+            self.assertTrue(task_json.exists())
+            self.assertTrue(task_md.exists())
+            self.assertTrue(marker.exists())
+
+            manifest = json.loads((output_dir / ".seedpipe_run_manifest.json").read_text())
+            align_row = [row for row in manifest["stages"] if row["stage_id"] == "align_quotes"][0]
+            self.assertEqual(align_row["status"], "waiting_human")
+
+            (output_dir / "quote_map.json").write_text(json.dumps({"quotes": []}))
+            code_resume = run_generated_flow(
+                generated_dir=generated_dir,
+                run_id="human-required-run",
+                output_dir=output_dir,
+                inputs_dir=inputs_dir,
+            )
+            self.assertEqual(code_resume, 0)
+            self.assertFalse(marker.exists())
+            self.assertTrue((output_dir / "manifest.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

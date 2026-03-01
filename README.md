@@ -40,6 +40,7 @@ without changing the core model.
 ## Roadmap tracking docs
 
 - Phase 4 agent-operable control plane tracking doc: `docs/phase3_agent_control_plane.md`
+- Future human-gated stage contract (proposed): `spec/phase1/human_required_stage_contract.md`
 
 ## Install from a local path
 
@@ -484,6 +485,33 @@ Use:
 - `--attempt` to set a non-default retry attempt number.
 
 `seedpipe-run` will error if the run output directory already exists (including the default `./artifacts/outputs/<run-id>` path), and will error if the inputs directory does not exist.
+
+### Human-required stage resume contract (future)
+
+The following behavior is specified for a proposed future extension and is not implemented in current runtime behavior.
+
+For a stage declared with `mode: human_required`, the runner is expected to:
+- emit task packet artifacts:
+  - `runs/<run_id>/tasks/<stage_id>.task.json`
+  - `runs/<run_id>/tasks/<stage_id>.md`
+- emit waiting marker:
+  - `runs/<run_id>/WAITING_HUMAN.<stage_id>`
+- mark stage state as `waiting_human` in `.seedpipe_run_manifest.json`
+- exit cleanly before downstream stage execution
+
+Resume flow:
+
+```bash
+seedpipe-run --resume <run_id>
+```
+
+Resume should continue only when completion proof is satisfied:
+- expected outputs exist
+- expected outputs pass schema validation
+
+Common blocked resume conditions:
+- missing output files
+- schema validation failures
 
 ## Use the compiler from Python
 
