@@ -776,6 +776,58 @@ stages: []
             self.assertNotIn("ctx.validate_outputs", placeholder_wrapper)
             self.assertIn("pass", placeholder_wrapper)
 
+    def test_compile_pipeline_human_required_flow_does_not_reference_ctx_inputs_attribute(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pipeline_path = root / "pipeline.yaml"
+            contracts_dir = root / "contracts"
+            output_dir = root / "generated"
+            contracts_dir.mkdir()
+
+            pipeline_path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": "phase1-human-required",
+                        "item_unit": "item",
+                        "determinism_policy": "strict",
+                        "stages": [
+                            {"id": "ingest", "mode": "whole_run", "inputs": [], "outputs": ["items.jsonl"]},
+                            {
+                                "id": "align_quotes",
+                                "mode": "human_required",
+                                "inputs": ["items.jsonl"],
+                                "outputs": ["quote_map.json"],
+                                "instructions": {
+                                    "summary": "Align quotes and anchors for mapping.",
+                                    "steps": ["python scripts/build_quote_map.py --in runs/{run_id}/items.jsonl --out runs/{run_id}/quote_map.json"],
+                                    "done_when": ["validate_quote_map exits 0"],
+                                },
+                            },
+                        ],
+                    }
+                )
+            )
+
+            contracts = {
+                "artifact_ref.schema.json": {"type": "object"},
+                "item_state_row.schema.json": {"type": "object"},
+                "items_row.schema.json": {"type": "object"},
+                "manifest.schema.json": {"type": "object"},
+            }
+            for name, payload in contracts.items():
+                (contracts_dir / name).write_text(json.dumps(payload))
+
+            compile_pipeline(
+                CompilePaths(
+                    pipeline_path=pipeline_path,
+                    contracts_dir=contracts_dir,
+                    output_dir=output_dir,
+                )
+            )
+
+            flow_text = (output_dir / "flow.py").read_text()
+            self.assertNotIn("ctx.inputs", flow_text)
+
     def test_compile_pipeline_does_not_bootstrap_src_stage_impls(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -701,7 +701,7 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
             call_lines.append(
                 f"                ctx = ctx_base.for_stage({stage.stage_id!r}, attempt=attempt, keys={dict(stage.keys)!r}, expected_outputs={list(stage.expected_outputs)!r})"
             )
-            call_lines.append("                ctx.validate_inputs(ctx.stage_id or '', list(ctx.inputs))")
+            call_lines.append(f"                ctx.validate_inputs(ctx.stage_id or '', {python_string_list(stage.inputs)})")
             call_lines.append(
                 f"                waiting = _human_stage_waiting(manifest=manifest, run_id=run_id, pipe_root=str(run_config.get('_pipe_root', '')), stage_id={stage.stage_id!r}, instructions={stage.instructions!r}, required_inputs={list(stage.inputs)!r}, expected_outputs={list(stage.expected_outputs)!r}, attempt=attempt)"
             )
