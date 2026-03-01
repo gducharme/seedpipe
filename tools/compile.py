@@ -370,6 +370,7 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
         placeholder = stage.get("placeholder")
         if not isinstance(placeholder, bool):
             raise CompileError(f"pipeline.stages[{idx}].placeholder must be a boolean")
+        
         reentry = stage.get("reentry")
         if reentry is not None and (not isinstance(reentry, str) or not reentry.strip()):
             raise CompileError(f"pipeline.stages[{idx}].reentry must be a non-empty string when provided")
@@ -482,6 +483,7 @@ def load_contracts(paths: CompilePaths) -> dict[str, dict[str, Any]]:
         "manifest.schema.json",
         "artifact_ref.schema.json",
         "item_state_row.schema.json",
+        "metrics_contract.schema.json",
     }
     missing = required - set(contracts)
     if missing:

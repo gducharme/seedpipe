@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Function Metric Governance Result",
+  "description": "Schema for function-level metric governance findings and eligibility status",
+  "type": "object",
+  "properties": {
+    "function_id": {
+      "type": "string",
+      "description": "Stable identifier for the function being evaluated"
+    },
+    "eligible_for_comparison": {
+      "type": "boolean",
+      "description": "Whether the function is eligible for agent-vs-incumbent replacement comparison"
+    },
+    "last_updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of the most recent metric record for this function"
+    },
+    "policy_id": {
+      "type": "string",
+      "description": "Policy identifier used for freshness evaluation"
+    },
+    "max_age_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum allowed age for metrics in seconds before they are considered stale"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "finding_id": {"type": "string"},
+          "policy_id": {"type": "string"},
+          "severity": {"type": "string", "enum": ["error", "warning"]},
+          "metric_name": {"type": "string"},
+          "message": {"type": "string"}
+        },
+        "required": ["finding_id", "policy_id", "severity", "message"],
+        "additionalProperties": false
+      }
+    },
+    "metrics_present": {
+      "type": "object",
+      "properties": {
+        "latency": {"type": ["boolean", "null"]},
+        "cost": {"type": ["boolean", "null"]},
+        "success_count": {"type": ["boolean", "null"]},
+        "failure_count": {"type": ["boolean", "null"]},
+        "quality_rating": {"type": ["boolean", "null"]}
+      }
+    }
+  },
+  "required": ["function_id", "eligible_for_comparison", "last_updated_at", "policy_id", "max_age_seconds", "findings"],
+  "additionalProperties": false
+}

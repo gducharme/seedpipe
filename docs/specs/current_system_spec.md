@@ -282,6 +282,45 @@ Scaffold writes:
 
 ## 3) Runtime Module Specification
 
+## 3.6 Metrics Contract (FR-006..FR-010)
+
+### 3.6.1 Metric Record Emission (`seedpipe.runtime.metrics.MetricRecord`, `MetricsEmitter`)
+- Function-level metrics are emitted as machine-readable records with all FR-007 fields:
+  - `function_id`: stable identifier for the function being measured
+  - `metric_name`: one of `latency`, `cost`, `success_count`, `failure_count`, `quality_rating` (FR-006)
+  - `value`: numeric value of the metric
+  - `unit`: canonical unit (`ms`, `USD`, `count`, or `1-5`)
+  - `timestamp`: ISO 8601 timestamp when recorded
+  - `run_id`: run identifier this metric belongs to
+  - `producer`: agent/system producing this metric
+
+### 3.6.2 Metrics Emitter (`MetricsEmitter`)
+- Writes metrics to `artifacts/metrics/` directory in JSONL format
+- Each function+metric combination produces a deterministic filename: `{function_id}__{metric_name}__{run_id}.jsonl`
+- Records are appended per execution for replay/reproducibility
+
+### 3.6.3 Governance Checker (`MetricsGovernanceChecker`)
+- Validates completeness and freshness of metrics (FR-008, FR-009)
+- Checks required metric dimensions: `latency`, `cost`, `success_count`, `failure_count`, `quality_rating`
+- Detects stale metrics based on configurable `max_age_seconds` policy threshold
+- Produces machine-readable governance findings tied to `function_id` and policy ID (FR-016, FR-017)
+
+### 3.6.4 Eligibility Determination (FR-010)
+- Functions missing required metrics are marked ineligible for replacement comparison
+- Stale metrics also block eligibility
+- Output includes explicit reasons in `findings` array with severity levels (`error`, `warning`)
+- `eligible_for_comparison` flag enables agent-vs-incumbant decision logic
+
+### 3.6.5 Schema Contracts
+- `docs/specs/phase1/contracts/metrics_contract.json`: row-level metric record schema
+- `docs/specs/phase1/contracts/function_metric_governance.schema.json`: governance findings and eligibility result
+- `docs/specs/phase1/contracts/function_metric_row.schema.json`: canonical units metadata for metrics
+
+### 3.6.6 Runtime API Export
+All metrics utilities are exported from `seedpipe.runtime` for use in generated flows:
+- `MetricRecord`, `MetricsEmitter`, `MetricsValidator`
+- `GovernanceFinding`, `FunctionMetricStatus`, `MetricsGovernanceChecker`
+
 ## 3.1 `StageContext` (`seedpipe.runtime.ctx`)
 - Holds immutable run/stage context (`run_id`, `stage_id`, `attempt`, run directory, config).
 - `make_base` validates non-empty string `run_id`.

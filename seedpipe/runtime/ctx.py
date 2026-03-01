@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import time
 from pathlib import Path
 from typing import Any
 
 from seedpipe.tools.contracts import TinySchemaValidator
+
+from .metrics import MetricRecord, MetricName, MetricUnit, MetricsEmitter
 
 
 @dataclass(frozen=True)
@@ -17,6 +20,33 @@ class StageContext:
     run_dir: Path = Path(".")
     keys: dict[str, str] | None = None
     expected_outputs: list[dict[str, Any]] | None = None
+    start_time: float | None = None
+    metrics_emitter: MetricsEmitter | None = None
+
+    def __post_init__(self):
+        if self.start_time is None:
+            object.__setattr__(self, 'start_time', time.time())
+        if self.metrics_emitter is None:
+            object.__setattr__(self, 'metrics_emitter', MetricsEmitter(self.run_id, self.stage_id or "root"))
+
+
+@dataclass(frozen=True)
+class StageContext:
+    run_config: dict[str, Any]
+    run_id: str
+    stage_id: str | None = None
+    attempt: int = 1
+    run_dir: Path = Path(".")
+    keys: dict[str, str] | None = None
+    expected_outputs: list[dict[str, Any]] | None = None
+    start_time: float | None = None
+    metrics_emitter: MetricsEmitter | None = None
+
+    def __post_init__(self):
+        if self.start_time is None:
+            object.__setattr__(self, 'start_time', time.time())
+        if self.metrics_emitter is None:
+            object.__setattr__(self, 'metrics_emitter', MetricsEmitter(self.run_id, self.stage_id or "root"))
 
     def _artifact_index(self) -> dict[str, str]:
         raw = self.run_config.get("_artifact_index", {})
