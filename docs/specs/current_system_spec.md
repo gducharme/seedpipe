@@ -279,6 +279,7 @@ The scaffold tests assert:
 - `tools/agent_loop.py` does not yet implement control-loop behavior.
 - Contract validation beyond compile-time mapping exists in `seedpipe.tools.verify`, but this document focuses on core compile/run/scaffold and tested guarantees.
 - Verifier/runner typed contracts now model manifests, artifact refs, and defects using `TypedDict` + `Literal` aliases (`seedpipe.tools.types`) while preserving runtime behavior.
+- Human-gated stage orchestration (`mode=human_required`, task packets, `waiting_human` manifest state) is not implemented yet; planned behavior is documented in `docs/specs/future_system_spec.md` and `spec/phase1/human_required_stage_contract.md`.
 
 ## 6) Operational Notes for Contributors
 

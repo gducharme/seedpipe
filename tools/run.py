@@ -230,7 +230,9 @@ def run_generated_flow(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run generated Seedpipe flow")
-    parser.add_argument("--run-id", required=True, help="Unique run identifier")
+    run_group = parser.add_mutually_exclusive_group(required=True)
+    run_group.add_argument("--run-id", help="Unique run identifier")
+    run_group.add_argument("--resume", help="Resume an existing run by run identifier")
     parser.add_argument("--attempt", type=int, default=1, help="Attempt number (default: 1)")
     parser.add_argument(
         "--generated-dir",
@@ -255,9 +257,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    run_id = args.run_id if isinstance(args.run_id, str) and args.run_id else args.resume
     code = run_generated_flow(
         generated_dir=args.generated_dir,
-        run_id=args.run_id,
+        run_id=run_id,
         attempt=args.attempt,
         output_dir=args.output_dir,
         inputs_dir=args.inputs_dir,

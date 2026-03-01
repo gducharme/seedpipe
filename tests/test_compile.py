@@ -540,6 +540,55 @@ stages: []
         with self.assertRaisesRegex(CompileError, "go_to must be a non-empty string"):
             validate_pipeline_structure(normalized)
 
+    def test_validate_pipeline_structure_accepts_human_required_with_instructions(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "straight",
+            "max_loops": 0,
+            "stages": [
+                {"id": "ingest", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["items.jsonl"]},
+                {
+                    "id": "align_quotes",
+                    "mode": "human_required",
+                    "placeholder": False,
+                    "inputs": ["items.jsonl"],
+                    "outputs": ["quote_map.json"],
+                    "instructions": {
+                        "summary": "Align quotes and anchors for mapping.",
+                        "steps": ["python scripts/build_quote_map.py --in runs/{run_id}/items.jsonl --out runs/{run_id}/quote_map.json"],
+                        "done_when": ["validate_quote_map exits 0"],
+                        "validation_command": "python scripts/validate_quote_map.py runs/{run_id}/quote_map.json",
+                    },
+                },
+            ],
+        }
+
+        validate_pipeline_structure(normalized)
+
+    def test_validate_pipeline_structure_rejects_human_required_missing_instructions(self) -> None:
+        normalized = {
+            "pipeline_id": "p1",
+            "item_unit": "item",
+            "determinism_policy": "strict",
+            "pipeline_type": "straight",
+            "max_loops": 0,
+            "stages": [
+                {"id": "ingest", "mode": "whole_run", "placeholder": False, "inputs": [], "outputs": ["items.jsonl"]},
+                {
+                    "id": "align_quotes",
+                    "mode": "human_required",
+                    "placeholder": False,
+                    "inputs": ["items.jsonl"],
+                    "outputs": ["quote_map.json"],
+                },
+            ],
+        }
+
+        with self.assertRaisesRegex(CompileError, "instructions must be an object"):
+            validate_pipeline_structure(normalized)
+
     def test_build_ir_captures_artifact_producers(self) -> None:
         pipeline = {
             "pipeline_id": "p1",
