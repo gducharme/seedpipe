@@ -61,8 +61,7 @@ class MetricRecordTests(unittest.TestCase):
 
 class MetricsValidatorTests(unittest.TestCase):
     def setUp(self) -> None:
-        import os
-        os.chdir("/Users/geoffreyducharme/code/worktrees/goofy-cats-pay-4v9")
+        pass
 
     def test_valid_record(self) -> None:
         validator = MetricsValidator()
