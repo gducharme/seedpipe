@@ -65,6 +65,12 @@ def _purge_generated_modules() -> None:
             sys.modules.pop(module_name, None)
 
 
+def _purge_local_src_modules() -> None:
+    for module_name in list(sys.modules):
+        if module_name == "seedpipe.src" or module_name.startswith("seedpipe.src."):
+            sys.modules.pop(module_name, None)
+
+
 @contextmanager
 def _pushd(target_dir: Path) -> Iterator[None]:
     previous_dir = Path.cwd()
@@ -198,6 +204,7 @@ def run_generated_flow(
     _mount_inputs(run_output_dir, inputs_dir)
 
     _purge_generated_modules()
+    _purge_local_src_modules()
     _mount_generated_package(generated_dir)
     _mount_local_src_package(generated_dir.parent)
 
