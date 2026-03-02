@@ -1,0 +1,56 @@
+pipeline_id: masra-gap-progress-analysis
+item_unit: ticket
+determinism_policy: strict
+stages:
+  - id: ingest_baseline_and_closure
+    mode: whole_run
+    inputs: []
+    outputs:
+      - planning/publish/ready/items.jsonl
+      - implementation/publish/rejected/items.jsonl
+      - qa/publish/closed/items.jsonl
+      - qa/publish/reopened/items.jsonl
+      - docs/specs/future_match_masra.md
+
+  - id: reconcile_ticket_status
+    mode: whole_run
+    inputs:
+      - planning/publish/ready/items.jsonl
+      - implementation/publish/rejected/items.jsonl
+      - qa/publish/closed/items.jsonl
+      - qa/publish/reopened/items.jsonl
+    outputs:
+      - analysis/progress/done_tickets.jsonl
+      - analysis/progress/remaining_tickets.jsonl
+      - analysis/progress/reopened_tickets.jsonl
+
+  - id: analyze_gap_closure
+    mode: per_item
+    inputs:
+      - analysis/progress/remaining_tickets.jsonl
+    outputs:
+      - analysis/progress/remaining_impact_rows.jsonl
+
+  - id: summarize_progress
+    mode: whole_run
+    inputs:
+      - analysis/progress/done_tickets.jsonl
+      - analysis/progress/remaining_tickets.jsonl
+      - analysis/progress/reopened_tickets.jsonl
+      - analysis/progress/remaining_impact_rows.jsonl
+      - docs/specs/future_match_masra.md
+    outputs:
+      - analysis/progress/progress_summary.json
+      - analysis/progress/gap_closure_scorecard.json
+      - planning/next_cycle/items.jsonl
+
+  - id: publish_progress_bundle
+    mode: whole_run
+    inputs:
+      - analysis/progress/progress_summary.json
+      - analysis/progress/gap_closure_scorecard.json
+      - planning/next_cycle/items.jsonl
+    outputs:
+      - manifest.json
+      - analysis/publish/progress_manifest.json
+      - analysis/publish/remaining/items.jsonl

@@ -1,0 +1,85 @@
+pipeline_id: masra-gap-coding-execution
+item_unit: ticket
+determinism_policy: strict
+pipeline_type: looping
+max_loops: 4
+stages:
+  - id: ingest_ready_tickets
+    mode: whole_run
+    inputs: []
+    outputs:
+      - planning/publish/ready/items.jsonl
+      - planning/publish/bundle_manifest.json
+      - implementation/context/run_context.json
+
+  - id: implement_ticket
+    mode: per_item
+    inputs:
+      - planning/publish/ready/items.jsonl
+      - implementation/context/run_context.json
+    outputs:
+      - implementation/results/item_results.jsonl
+      - implementation/results/change_log.jsonl
+      - implementation/results/test_commands.jsonl
+    reentry: retry_implementation
+
+  - id: validate_implementation
+    mode: per_item
+    inputs:
+      - implementation/results/item_results.jsonl
+      - implementation/results/change_log.jsonl
+      - implementation/results/test_commands.jsonl
+    outputs:
+      - implementation/validation/validation_rows.jsonl
+      - implementation/validation/defects.jsonl
+    go_to: retry_implementation
+
+  - id: finalize_coding_results
+    mode: whole_run
+    inputs:
+      - planning/publish/ready/items.jsonl
+      - implementation/results/item_results.jsonl
+      - implementation/results/change_log.jsonl
+      - implementation/validation/validation_rows.jsonl
+      - implementation/validation/defects.jsonl
+    outputs:
+      - implementation/reports/execution_summary.json
+      - implementation/reports/open_defects.jsonl
+      - validation.json
+
+  - id: coding_review_gate
+    mode: human_required
+    inputs:
+      - implementation/reports/execution_summary.json
+      - implementation/reports/open_defects.jsonl
+      - validation.json
+    outputs:
+      - implementation/review/approved_results.jsonl
+      - implementation/review/rejected_results.jsonl
+      - implementation/review/review_notes.md
+    instructions:
+      summary: Approve only coding results with complete evidence and passing validation.
+      steps:
+        - Review implementation/reports/execution_summary.json for per-ticket outcome and evidence completeness.
+        - Review implementation/reports/open_defects.jsonl and confirm unresolved defects are explicitly rejected.
+        - Write implementation/review/approved_results.jsonl for tickets ready for QA closure.
+        - Write implementation/review/rejected_results.jsonl for tickets requiring another coding cycle, and summarize rationale in implementation/review/review_notes.md.
+      done_when:
+        - implementation/review/approved_results.jsonl exists.
+        - implementation/review/rejected_results.jsonl exists.
+        - implementation/review/review_notes.md exists.
+      validation_command: python -m tools.verify --run-dir .
+
+  - id: publish_coding_bundle
+    mode: whole_run
+    inputs:
+      - implementation/results/item_results.jsonl
+      - implementation/results/change_log.jsonl
+      - implementation/review/approved_results.jsonl
+      - implementation/review/rejected_results.jsonl
+      - implementation/review/review_notes.md
+    outputs:
+      - manifest.json
+      - implementation/publish/coding_manifest.json
+      - implementation/publish/approved/items.jsonl
+      - implementation/publish/rejected/items.jsonl

@@ -1,0 +1,52 @@
+pipeline_id: masra-gap-analysis-ticketing
+item_unit: feature_gap
+determinism_policy: strict
+stages:
+  - id: ingest_future_match
+    mode: whole_run
+    inputs: []
+    outputs:
+      - analysis/source/future_match.md
+      - analysis/source/current_system_spec.md
+      - analysis/source/future_system_spec.md
+
+  - id: normalize_gap_items
+    mode: whole_run
+    inputs:
+      - analysis/source/future_match.md
+      - analysis/source/current_system_spec.md
+      - analysis/source/future_system_spec.md
+    outputs:
+      - analysis/gap_inventory/items.jsonl
+
+  - id: product_impact_analysis
+    mode: per_item
+    inputs:
+      - analysis/gap_inventory/items.jsonl
+    outputs:
+      - analysis/impact/impact_rows.jsonl
+
+  - id: draft_engineering_tickets
+    mode: per_item
+    inputs:
+      - analysis/impact/impact_rows.jsonl
+    outputs:
+      - planning/tickets/draft_tickets.jsonl
+
+  - id: ticket_backlog_finalize
+    mode: whole_run
+    inputs:
+      - planning/tickets/draft_tickets.jsonl
+    outputs:
+      - planning/tickets/backlog_summary.json
+      - planning/tickets/ready/items.jsonl
+
+  - id: publish_ticket_bundle
+    mode: whole_run
+    inputs:
+      - planning/tickets/backlog_summary.json
+      - planning/tickets/ready/items.jsonl
+    outputs:
+      - manifest.json
+      - planning/publish/bundle_manifest.json
+      - planning/publish/ready/items.jsonl

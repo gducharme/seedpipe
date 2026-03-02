@@ -437,6 +437,10 @@ The scaffold tests assert:
 - README copy source follows runtime `REPO_ROOT` (patchable in test).
 - no-force overwrite protection is enforced.
 
+## 4.6 CI test enforcement
+- CI executes `pytest -q` for the repository test suite.
+- CI explicitly executes `tests/test_sample_integration.py` as a dedicated step to enforce sample pipeline compile/run coverage.
+
 ## 5) Constraints and Non-Goals in Current Implementation
 
 - No scheduler or service control plane is implemented.

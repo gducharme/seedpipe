@@ -36,3 +36,6 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+      - name: Run sample pipeline integration test explicitly
+        run: pytest -q tests/test_sample_integration.py

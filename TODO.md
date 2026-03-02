@@ -1,5 +1,70 @@
 # TODO
 
+## Top Backlog: Autocoding Production Reliability
+
+1. **Define canonical ticket contracts and status transitions** `(NEW)`
+   - Scope:
+     - Add schema contracts for shared ticket rows across pipelines A/B/C/D.
+     - Enforce one canonical status algebra: `ready`, `in_progress`, `implemented`, `qa_failed`, `approved`, `rejected`, `closed`, `reopened`.
+   - Why:
+     - Current multi-pipeline flow depends on implicit row shapes and status meaning.
+     - Without a shared contract, handoffs drift and closure logic becomes non-deterministic.
+   - Acceptance:
+     - new schema files added under `docs/specs/phase1/contracts/`,
+     - compiler/runtime validation catches invalid status transitions,
+     - tests cover at least one invalid and one valid transition path.
+
+2. **Add ticket-level acceptance contract fields** `(NEW)`
+   - Scope:
+     - Require each ticket to declare objective closure criteria:
+       - expected file paths/artifacts,
+       - required test command(s),
+       - target spec references,
+       - evidence pointers.
+   - Why:
+     - Prevents subjective closure and review ambiguity in coding + QA stages.
+   - Acceptance:
+     - ticket schema includes mandatory acceptance fields,
+     - `pipeline_b_coding_execution` and `pipeline_c_qa_ticket_closure` stage code validates evidence against those fields,
+     - failed evidence forces deterministic non-closure state.
+
+3. **Implement loop guardrails and escalation policy** `(NEW)`
+   - Scope:
+     - Add deterministic guardrails:
+       - max retries per ticket,
+       - auto-quarantine after threshold,
+       - mandatory human escalation marker for repeated failures.
+   - Why:
+     - Prevents infinite churn loops and silent rework cycles in autocoding.
+   - Acceptance:
+     - guardrail policy encoded as machine-readable artifact,
+     - ticket exceeding threshold transitions to `reopened` or `quarantined` deterministically,
+     - tests confirm loops stop with explicit reason.
+
+4. **Define deterministic requeue semantics from progress analysis** `(NEW)`
+   - Scope:
+     - Specify how `analysis/publish/remaining/items.jsonl` maps back into next-cycle ready tickets.
+     - Include dedupe/idempotency and carry-forward evidence rules.
+   - Why:
+     - Closed-loop autonomy requires deterministic recycle of remaining work.
+   - Acceptance:
+     - documented requeue contract and schema,
+     - repeat runs do not duplicate tickets,
+     - tests verify stable IDs and evidence continuity across cycles.
+
+5. **Implement concrete stage modules for B/C/D pipeline artifacts** `(NEW)`
+   - Scope:
+     - Build `src/stages/*.py` implementations for:
+       - coding execution + validation,
+       - QA closure + human review packet output,
+       - done-vs-remaining analysis and scorecard output.
+   - Why:
+     - Current pipeline specs define orchestration shape; production readiness requires executable stage logic with deterministic outputs.
+   - Acceptance:
+     - all stage modules exist and emit declared artifacts,
+     - compile + run integration test covers A→B→C→D happy path,
+     - at least one failure-path test validates loop + reopen behavior.
+
 ## Design-Pattern Refactor Tasks
 
 ### High Priority
