@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import yaml
 
@@ -50,6 +50,153 @@ class WatchConfig:
     outputs_root: Path
     inputs_root: Path
     pipe_root: Path
+
+
+class RunnerBackend(Protocol):
+    name: str
+
+    def run(self, config: WatchConfig, run_id: str, inputs_dir: Path, run_config: dict[str, Any]) -> int:
+        ...
+
+
+@dataclass(frozen=True)
+class LocalRunnerBackend:
+    name: str = "local"
+
+    def run(self, config: WatchConfig, run_id: str, inputs_dir: Path, run_config: dict[str, Any]) -> int:
+        return run_generated_flow(
+            generated_dir=config.generated_dir,
+            run_id=run_id,
+            output_dir=config.outputs_root / run_id,
+            inputs_dir=inputs_dir,
+            run_config=run_config,
+        )
+
+
+@dataclass(frozen=True)
+class DockerRunnerBackend:
+    image: str
+    name: str = "docker"
+
+    def run(self, config: WatchConfig, run_id: str, inputs_dir: Path, run_config: dict[str, Any]) -> int:
+        _ = inputs_dir
+        runtime_dir = config.pipe_root / ".seedpipe_watch_runtime"
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        config_path = runtime_dir / f"{run_id}.run_config.json"
+        config_path.write_text(json.dumps(run_config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        command = [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{config.pipe_root.resolve()}:/work",
+            "-w",
+            "/work",
+            self.image,
+            "python",
+            "-m",
+            "tools.run",
+            "--run-id",
+            run_id,
+            "--generated-dir",
+            "/work/generated",
+            "--inputs-dir",
+            f"/work/artifacts/inputs/{run_id}",
+            "--output-dir",
+            f"/work/artifacts/outputs/{run_id}",
+            "--run-config-file",
+            f"/work/.seedpipe_watch_runtime/{config_path.name}",
+        ]
+        completed = subprocess.run(command, cwd=config.pipe_root, check=False)
+        return int(completed.returncode)
+
+
+@dataclass
+class BundleValidationFailure:
+    code: str
+    message: str
+
+
+@dataclass
+class BundleValidationContext:
+    bundle_dir: Path
+    pipeline_id: str
+    manifest: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class BundleValidationResult:
+    ok: bool
+    failure: BundleValidationFailure | None = None
+
+
+class BundlePolicy(Protocol):
+    def validate(self, ctx: BundleValidationContext) -> BundleValidationFailure | None:
+        ...
+
+
+@dataclass(frozen=True)
+class ReadyMarkerPolicy:
+    def validate(self, ctx: BundleValidationContext) -> BundleValidationFailure | None:
+        ready = ctx.bundle_dir / READY_MARKER
+        if ready.exists():
+            return None
+        return BundleValidationFailure(code="not_ready", message="bundle is not ready")
+
+
+@dataclass(frozen=True)
+class ManifestExistsPolicy:
+    def validate(self, ctx: BundleValidationContext) -> BundleValidationFailure | None:
+        manifest_path = ctx.bundle_dir / "manifest.json"
+        if manifest_path.exists():
+            return None
+        return BundleValidationFailure(code="missing_manifest", message="missing manifest.json")
+
+
+@dataclass(frozen=True)
+class PayloadDirPolicy:
+    def validate(self, ctx: BundleValidationContext) -> BundleValidationFailure | None:
+        payload_dir = ctx.bundle_dir / "payload"
+        if payload_dir.exists() and payload_dir.is_dir():
+            return None
+        return BundleValidationFailure(code="missing_payload", message="missing payload/ directory")
+
+
+@dataclass(frozen=True)
+class ParseManifestPolicy:
+    def validate(self, ctx: BundleValidationContext) -> BundleValidationFailure | None:
+        manifest_path = ctx.bundle_dir / "manifest.json"
+        try:
+            ctx.manifest = _load_json(manifest_path)
+        except Exception as exc:
+            return BundleValidationFailure(code="invalid_manifest", message=f"invalid manifest.json: {exc}")
+        return None
+
+
+@dataclass(frozen=True)
+class ManifestPipelineMatchPolicy:
+    def validate(self, ctx: BundleValidationContext) -> BundleValidationFailure | None:
+        manifest = ctx.manifest or {}
+        manifest_pipeline = str(manifest.get("pipeline_id", "")).strip()
+        if manifest_pipeline and manifest_pipeline != ctx.pipeline_id:
+            return BundleValidationFailure(
+                code="pipeline_mismatch",
+                message="manifest pipeline_id does not match inbox pipeline",
+            )
+        return None
+
+
+@dataclass(frozen=True)
+class ManifestBundleIdMatchPolicy:
+    def validate(self, ctx: BundleValidationContext) -> BundleValidationFailure | None:
+        manifest = ctx.manifest or {}
+        manifest_bundle = str(manifest.get("bundle_id", "")).strip()
+        if manifest_bundle and manifest_bundle != ctx.bundle_dir.name:
+            return BundleValidationFailure(
+                code="bundle_id_mismatch",
+                message="manifest bundle_id does not match bundle directory",
+            )
+        return None
 
 
 def _utc_now() -> str:
@@ -119,27 +266,31 @@ def _discover_pipelines(inbox_root: Path) -> list[str]:
     return sorted([p.name for p in inbox_root.iterdir() if p.is_dir() and not p.name.startswith(".")])
 
 
+def _bundle_policies() -> tuple[BundlePolicy, ...]:
+    return (
+        ReadyMarkerPolicy(),
+        ManifestExistsPolicy(),
+        PayloadDirPolicy(),
+        ParseManifestPolicy(),
+        ManifestPipelineMatchPolicy(),
+        ManifestBundleIdMatchPolicy(),
+    )
+
+
+def _validate_bundle_result(bundle_dir: Path, pipeline_id: str) -> BundleValidationResult:
+    ctx = BundleValidationContext(bundle_dir=bundle_dir, pipeline_id=pipeline_id)
+    for policy in _bundle_policies():
+        failure = policy.validate(ctx)
+        if failure is not None:
+            return BundleValidationResult(ok=False, failure=failure)
+    return BundleValidationResult(ok=True)
+
+
 def _validate_bundle(bundle_dir: Path, pipeline_id: str) -> tuple[bool, str]:
-    ready = bundle_dir / READY_MARKER
-    if not ready.exists():
-        return False, "bundle is not ready"
-    manifest_path = bundle_dir / "manifest.json"
-    if not manifest_path.exists():
-        return False, "missing manifest.json"
-    payload_dir = bundle_dir / "payload"
-    if not payload_dir.exists() or not payload_dir.is_dir():
-        return False, "missing payload/ directory"
-    try:
-        manifest = _load_json(manifest_path)
-    except Exception as exc:
-        return False, f"invalid manifest.json: {exc}"
-    manifest_pipeline = str(manifest.get("pipeline_id", "")).strip()
-    if manifest_pipeline and manifest_pipeline != pipeline_id:
-        return False, "manifest pipeline_id does not match inbox pipeline"
-    manifest_bundle = str(manifest.get("bundle_id", "")).strip()
-    if manifest_bundle and manifest_bundle != bundle_dir.name:
-        return False, "manifest bundle_id does not match bundle directory"
-    return True, ""
+    result = _validate_bundle_result(bundle_dir, pipeline_id)
+    if result.ok:
+        return True, ""
+    return False, result.failure.message if result.failure is not None else "invalid bundle"
 
 
 def _reclaim_stale_claims(config: WatchConfig, pipeline_id: str) -> None:
@@ -347,58 +498,17 @@ def publish_outbox_bundle(
     return bundle_dir
 
 
-def _run_local(
+def _select_runner_backend(
     config: WatchConfig,
-    run_id: str,
-    inputs_dir: Path,
-    run_config: dict[str, Any],
-) -> int:
-    return run_generated_flow(
-        generated_dir=config.generated_dir,
-        run_id=run_id,
-        output_dir=config.outputs_root / run_id,
-        inputs_dir=inputs_dir,
-        run_config=run_config,
-    )
-
-
-def _run_docker(
-    config: WatchConfig,
-    run_id: str,
-    run_config: dict[str, Any],
-    image: str,
-) -> int:
-    if shutil.which("docker") is None:
-        raise RuntimeError("docker runner requested but docker is not available")
-    runtime_dir = config.pipe_root / ".seedpipe_watch_runtime"
-    runtime_dir.mkdir(parents=True, exist_ok=True)
-    config_path = runtime_dir / f"{run_id}.run_config.json"
-    config_path.write_text(json.dumps(run_config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    command = [
-        "docker",
-        "run",
-        "--rm",
-        "-v",
-        f"{config.pipe_root.resolve()}:/work",
-        "-w",
-        "/work",
-        image,
-        "python",
-        "-m",
-        "tools.run",
-        "--run-id",
-        run_id,
-        "--generated-dir",
-        "/work/generated",
-        "--inputs-dir",
-        f"/work/artifacts/inputs/{run_id}",
-        "--output-dir",
-        f"/work/artifacts/outputs/{run_id}",
-        "--run-config-file",
-        f"/work/.seedpipe_watch_runtime/{config_path.name}",
-    ]
-    completed = subprocess.run(command, cwd=config.pipe_root, check=False)
-    return int(completed.returncode)
+) -> RunnerBackend:
+    lock_payload = _load_seedpipe_lock(config.pipe_root)
+    desired = _effective_runner(config, lock_payload)
+    if desired == "docker":
+        image = _docker_image(lock_payload)
+        if image and shutil.which("docker") is not None:
+            return DockerRunnerBackend(image=image)
+        return LocalRunnerBackend()
+    return LocalRunnerBackend()
 
 
 def _invoke_runner(
@@ -407,14 +517,8 @@ def _invoke_runner(
     inputs_dir: Path,
     run_config: dict[str, Any],
 ) -> tuple[int, str]:
-    lock_payload = _load_seedpipe_lock(config.pipe_root)
-    desired = _effective_runner(config, lock_payload)
-    if desired == "docker":
-        image = _docker_image(lock_payload)
-        if image and shutil.which("docker") is not None:
-            return _run_docker(config, run_id, run_config, image), "docker"
-        return _run_local(config, run_id, inputs_dir, run_config), "local"
-    return _run_local(config, run_id, inputs_dir, run_config), "local"
+    backend = _select_runner_backend(config)
+    return backend.run(config, run_id, inputs_dir, run_config), backend.name
 
 
 def _publish_from_claim(
@@ -540,45 +644,86 @@ def _scan_completed_runs_for_outbox(config: WatchConfig) -> int:
     return published
 
 
+def _load_claim_run_config(claim_dir: Path) -> dict[str, Any]:
+    run_config_path = claim_dir / "run_config.json"
+    if run_config_path.exists():
+        return _load_json(run_config_path)
+    return {}
+
+
+def _build_claim_trigger_payload(claim_dir: Path) -> dict[str, Any]:
+    trigger_payload: dict[str, Any] = {"type": "filesystem", "source_bundle": claim_dir.name, "claimed_at": _utc_now()}
+    trigger_path = claim_dir / "trigger.json"
+    if trigger_path.exists():
+        trigger_payload["payload"] = _load_json(trigger_path)
+    return trigger_payload
+
+
+def _derive_claim_run_context(pipeline_id: str, claim_dir: Path) -> tuple[str, int]:
+    claim_payload = _load_json(claim_dir / ".claim.json")
+    claimed_at = str(claim_payload.get("claimed_at", ""))
+    claim_ts = int(datetime.fromisoformat(claimed_at.replace("Z", "+00:00")).timestamp()) if claimed_at else int(time.time())
+    run_id = _compute_run_id(pipeline_id, claim_dir, claim_ts)
+    return run_id, claim_ts
+
+
+def _build_effective_run_config(run_config: dict[str, Any], run_id: str, trigger_payload: dict[str, Any]) -> dict[str, Any]:
+    effective_run_config = dict(run_config)
+    effective_run_config["run_id"] = run_id
+    effective_run_config["trigger"] = trigger_payload
+    return effective_run_config
+
+
+def _execute_claim_run(
+    config: WatchConfig,
+    pipeline_id: str,
+    claim_dir: Path,
+    run_id: str,
+    inputs_dir: Path,
+    effective_run_config: dict[str, Any],
+) -> tuple[int, str]:
+    code, backend = _invoke_runner(config, run_id, inputs_dir, effective_run_config)
+    _append_event(
+        config.pipe_root,
+        {
+            "ts": _utc_now(),
+            "event": "run_finished",
+            "pipeline_id": pipeline_id,
+            "bundle_id": claim_dir.name,
+            "run_id": run_id,
+            "runtime_backend": backend,
+            "exit_code": code,
+        },
+    )
+    return code, backend
+
+
+def _publish_and_finalize_claim_success(
+    config: WatchConfig,
+    pipeline_id: str,
+    claim_dir: Path,
+    run_id: str,
+    effective_run_config: dict[str, Any],
+) -> None:
+    published = _publish_from_claim(config, claim_dir, run_id, effective_run_config)
+    _append_event(
+        config.pipe_root,
+        {"ts": _utc_now(), "event": "published", "run_id": run_id, "count": len(published), "bundles": published},
+    )
+    _publish_completed_run_to_outbox(config, config.outputs_root / run_id)
+    _transition_bundle_state(config, pipeline_id, claim_dir, to_state=BundleState.DONE)
+
+
 def _process_claim(config: WatchConfig, pipeline_id: str, claim_dir: Path) -> int:
     try:
-        run_config = {}
-        run_config_path = claim_dir / "run_config.json"
-        if run_config_path.exists():
-            run_config = _load_json(run_config_path)
-        trigger_payload: dict[str, Any] = {"type": "filesystem", "source_bundle": claim_dir.name, "claimed_at": _utc_now()}
-        trigger_path = claim_dir / "trigger.json"
-        if trigger_path.exists():
-            trigger_payload["payload"] = _load_json(trigger_path)
-        claim_payload = _load_json(claim_dir / ".claim.json")
-        claimed_at = str(claim_payload.get("claimed_at", ""))
-        claim_ts = int(datetime.fromisoformat(claimed_at.replace("Z", "+00:00")).timestamp()) if claimed_at else int(time.time())
-        run_id = _compute_run_id(pipeline_id, claim_dir, claim_ts)
+        run_config = _load_claim_run_config(claim_dir)
+        trigger_payload = _build_claim_trigger_payload(claim_dir)
+        run_id, _claim_ts = _derive_claim_run_context(pipeline_id, claim_dir)
         inputs_dir = _materialize_inputs(config, run_id, claim_dir)
-        effective_run_config = dict(run_config)
-        effective_run_config["run_id"] = run_id
-        effective_run_config["trigger"] = trigger_payload
-        code, backend = _invoke_runner(config, run_id, inputs_dir, effective_run_config)
-        _append_event(
-            config.pipe_root,
-            {
-                "ts": _utc_now(),
-                "event": "run_finished",
-                "pipeline_id": pipeline_id,
-                "bundle_id": claim_dir.name,
-                "run_id": run_id,
-                "runtime_backend": backend,
-                "exit_code": code,
-            },
-        )
+        effective_run_config = _build_effective_run_config(run_config, run_id, trigger_payload)
+        code, _backend = _execute_claim_run(config, pipeline_id, claim_dir, run_id, inputs_dir, effective_run_config)
         if code == 0:
-            published = _publish_from_claim(config, claim_dir, run_id, effective_run_config)
-            _append_event(
-                config.pipe_root,
-                {"ts": _utc_now(), "event": "published", "run_id": run_id, "count": len(published), "bundles": published},
-            )
-            _publish_completed_run_to_outbox(config, config.outputs_root / run_id)
-            _transition_bundle_state(config, pipeline_id, claim_dir, to_state=BundleState.DONE)
+            _publish_and_finalize_claim_success(config, pipeline_id, claim_dir, run_id, effective_run_config)
         return code
     except Exception as exc:
         _reject_claim(config, pipeline_id, claim_dir, f"processing error: {exc}")

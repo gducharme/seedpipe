@@ -263,11 +263,38 @@ Scaffold writes:
 - A duplicate shadowed `StageContext` declaration was removed to reduce dead code and ambiguity in runtime behavior.
 - Compiler flow generation (`tools/compile.py`) now extracts stage-invocation grouping and stage module-name normalization into dedicated helpers to reduce branching complexity ahead of stage-strategy modularization.
 - Compiler flow generation now also extracts mode-specific stage call emission (`human_required`, `whole_run`, `per_item`) plus shared completion/error blocks into helper functions to reduce orchestration complexity in `emit_flow_py`.
+- Compiler flow generation now dispatches stage-mode behavior via explicit mode strategies (`_stage_mode_emitters`) rather than inline mode branching in the main orchestration loop.
 - Compiler emitters now use a shared `CodeBuilder` utility, and `emit_flow_py` no longer uses a monolithic concatenated string path; output assembly is chunked into explicit builder sections (imports/constants/helper blocks/run loop tail).
 - Run-manifest handling is now centralized behind repository-style APIs in both:
   - `tools/run.py` (`RunManifestRepository` for load/seed/completion/resume decisions),
   - generated runtime helper code emitted by `tools/compile.py` (`RunManifestRepository` + `_MANIFEST_REPO`).
 - Watcher bundle lifecycle transitions are now represented by explicit states (`ready`, `claimed`, `rejected`, `done`) and centralized transition helpers in `tools/watch.py` (`BundleState`, `_transition_bundle_state`), rather than ad-hoc path movement at each call site.
+- Watcher runner backend dispatch is adapter-based:
+  - backend protocol (`RunnerBackend`),
+  - local backend (`LocalRunnerBackend`),
+  - docker backend (`DockerRunnerBackend`),
+  selected by `_select_runner_backend(...)` and invoked through a uniform `run(...)` contract.
+- Bundle admission validation in watcher is policy-driven:
+  - ordered `BundlePolicy` rules,
+  - structured outcomes via `BundleValidationResult` and `BundleValidationFailure`,
+  while preserving existing reject/ignore semantics in scan flow.
+- Claim processing in watcher is now structured as an explicit step pipeline (Template Method style) with separated helpers for:
+  - loading claim config,
+  - building trigger payload,
+  - deriving run context,
+  - executing run,
+  - publishing/finalizing success.
+- Metrics domain value objects (`MetricRecord`, `GovernanceFinding`, `FunctionMetricStatus`) are now frozen dataclasses with constructor-level invariants and `from_dict` factories, reducing boilerplate and tightening runtime validity checks.
+- Runtime stage context now uses facade + collaborators:
+  - `StageContext` remains the facade API consumed by generated code,
+  - `ArtifactResolver` handles artifact path resolution rules,
+  - `StageSchemaValidator` handles stage schema loading/validation.
+- Compiler structural validation is now organized as an explicit validator chain:
+  - top-level pipeline validator (`_validate_pipeline_top_level`),
+  - stage-row validator (`_validate_stage_rows`),
+  - loop/straight semantics validator (`_validate_loop_semantics`),
+  coordinated by `validate_pipeline_structure(...)`.
+- Artifact-to-schema resolution now uses explicit ordered specification rules (`ArtifactSchemaSpec`) instead of chained conditional branches in `resolve_artifact_schemas(...)`.
 
 ### Claim / process lifecycle
 - Claims by atomic rename into `inbox/<pipeline_id>/.claimed/<bundle_id>.<watcher_id>`.

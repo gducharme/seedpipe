@@ -252,15 +252,15 @@ class MetricsGovernanceCheckerTests(unittest.TestCase):
                 metrics_dir.mkdir(parents=True)
 
                 old_timestamp = (dt.datetime.now() - dt.timedelta(hours=2)).isoformat()
-                record = MetricRecord.from_execution(
+                record = MetricRecord(
                     function_id="bg-removal",
                     metric_name="latency",
                     value=150.5,
                     unit="ms",
+                    timestamp=old_timestamp,
                     run_id="run-test",
-                    producer="test-agent"
+                    producer="test-agent",
                 )
-                record.timestamp = old_timestamp
 
                 with (metrics_dir / "bg-removal__latency__run-test.jsonl").open("w") as f:
                     f.write(json.dumps(record.to_dict()) + "\n")

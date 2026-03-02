@@ -13,7 +13,7 @@
      - only one `StageContext` declaration remains,
      - runtime context tests continue to pass.
 
-2. **Split compiler flow generation by stage strategy** `(IN PROGRESS)`
+2. **Split compiler flow generation by stage strategy** `(DONE 2026-03-02)`
    - File: `tools/compile.py` (`emit_flow_py`)
    - Pattern:
      - Template Method + Strategy for stage-mode-specific generation (`whole_run`, `per_item`, `human_required`).
@@ -43,17 +43,19 @@
      - State pattern for `ready`, `claimed`, `rejected`, `done`, `stale-reclaimed`.
    - Acceptance:
      - lifecycle transitions are explicit and tested by state transitions, not scattered conditionals.
+   - Follow-up:
+     - watcher runner dispatch now uses backend adapters (`RunnerBackend`, `LocalRunnerBackend`, `DockerRunnerBackend`) selected by `_select_runner_backend`.
 
 ### Low Priority
 
-6. **Modularize compile validation as validator chain**
+6. **Modularize compile validation as validator chain** `(DONE 2026-03-02)`
    - File: `tools/compile.py` (`validate_pipeline_structure`)
    - Pattern:
      - Chain of Responsibility for top-level, stage-level, loop, and human-required validation slices.
    - Acceptance:
      - compile validation logic is split into composable validators with unchanged error quality.
 
-7. **Replace artifact schema mapping conditionals with specs**
+7. **Replace artifact schema mapping conditionals with specs** `(DONE 2026-03-02)`
    - File: `tools/compile.py` (`resolve_artifact_schemas`)
    - Pattern:
      - Specification pattern for artifact-to-schema rules.
