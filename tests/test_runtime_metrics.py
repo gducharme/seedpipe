@@ -124,25 +124,29 @@ class MetricsEmitterTests(unittest.TestCase):
     def test_emit_creates_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             import os
+            prev_cwd = Path.cwd()
             os.chdir(tmp)
-            Path("artifacts").mkdir()
+            try:
+                Path("artifacts").mkdir()
 
-            emitter = MetricsEmitter(run_id="run-1", producer="test-agent")
-            record = MetricRecord(
-                function_id="bg-removal",
-                metric_name="latency",
-                value=150.5,
-                unit="ms",
-                timestamp="2026-03-01T12:00:00",
-                run_id="run-1",
-                producer="test-agent"
-            )
-            path = emitter.emit(record)
+                emitter = MetricsEmitter(run_id="run-1", producer="test-agent")
+                record = MetricRecord(
+                    function_id="bg-removal",
+                    metric_name="latency",
+                    value=150.5,
+                    unit="ms",
+                    timestamp="2026-03-01T12:00:00",
+                    run_id="run-1",
+                    producer="test-agent"
+                )
+                path = emitter.emit(record)
 
-            self.assertTrue(path.exists())
-            content = path.read_text()
-            data = json.loads(content.strip())
-            self.assertEqual(data["function_id"], "bg-removal")
+                self.assertTrue(path.exists())
+                content = path.read_text()
+                data = json.loads(content.strip())
+                self.assertEqual(data["function_id"], "bg-removal")
+            finally:
+                os.chdir(prev_cwd)
 
 
 class GovernanceFindingTests(unittest.TestCase):
@@ -186,76 +190,88 @@ class MetricsGovernanceCheckerTests(unittest.TestCase):
     def test_check_missing_metric_dimensions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             import os
+            prev_cwd = Path.cwd()
             os.chdir(tmp)
-            metrics_dir = Path(tmp) / "artifacts" / "metrics"
-            metrics_dir.mkdir(parents=True)
+            try:
+                metrics_dir = Path(tmp) / "artifacts" / "metrics"
+                metrics_dir.mkdir(parents=True)
 
-            checker = MetricsGovernanceChecker(max_age_seconds=3600)
-            status = checker.check("bg-removal", metrics_dir=metrics_dir)
+                checker = MetricsGovernanceChecker(max_age_seconds=3600)
+                status = checker.check("bg-removal", metrics_dir=metrics_dir)
 
-            self.assertFalse(status.eligible_for_comparison)
-            missing_count = len([f for f in status.findings if "missing" in f.finding_id])
-            self.assertEqual(missing_count, 5)
+                self.assertFalse(status.eligible_for_comparison)
+                missing_count = len([f for f in status.findings if "missing" in f.finding_id])
+                self.assertEqual(missing_count, 5)
+            finally:
+                os.chdir(prev_cwd)
 
     def test_check_eligible_with_all_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             import os
+            prev_cwd = Path.cwd()
             os.chdir(tmp)
-            metrics_dir = Path(tmp) / "artifacts" / "metrics"
-            metrics_dir.mkdir(parents=True)
+            try:
+                metrics_dir = Path(tmp) / "artifacts" / "metrics"
+                metrics_dir.mkdir(parents=True)
 
-            # Write all required metrics
-            for metric_name, value, unit in [
-                ("latency", 150.5, "ms"),
-                ("cost", 0.02, "USD"),
-                ("success_count", 98, "count"),
-                ("failure_count", 2, "count"),
-                ("quality_rating", 4.5, "1-5")
-            ]:
-                record = MetricRecord.from_execution(
-                    function_id="bg-removal",
-                    metric_name=metric_name,
-                    value=value,
-                    unit=unit,
-                    run_id="run-test",
-                    producer="test-agent"
-                )
-                path = Path(f"{metrics_dir}/bg-removal__{metric_name}__run-test.jsonl")
-                with path.open("w") as f:
-                    f.write(json.dumps(record.to_dict()) + "\n")
+                # Write all required metrics
+                for metric_name, value, unit in [
+                    ("latency", 150.5, "ms"),
+                    ("cost", 0.02, "USD"),
+                    ("success_count", 98, "count"),
+                    ("failure_count", 2, "count"),
+                    ("quality_rating", 4.5, "1-5")
+                ]:
+                    record = MetricRecord.from_execution(
+                        function_id="bg-removal",
+                        metric_name=metric_name,
+                        value=value,
+                        unit=unit,
+                        run_id="run-test",
+                        producer="test-agent"
+                    )
+                    path = Path(f"{metrics_dir}/bg-removal__{metric_name}__run-test.jsonl")
+                    with path.open("w") as f:
+                        f.write(json.dumps(record.to_dict()) + "\n")
 
-            checker = MetricsGovernanceChecker(max_age_seconds=3600)
-            status = checker.check("bg-removal", metrics_dir=metrics_dir)
+                checker = MetricsGovernanceChecker(max_age_seconds=3600)
+                status = checker.check("bg-removal", metrics_dir=metrics_dir)
 
-            self.assertTrue(status.eligible_for_comparison)
-            self.assertEqual(len([f for f in status.findings if "missing" in str(f.finding_id)]), 0)
+                self.assertTrue(status.eligible_for_comparison)
+                self.assertEqual(len([f for f in status.findings if "missing" in str(f.finding_id)]), 0)
+            finally:
+                os.chdir(prev_cwd)
 
     def test_check_stale_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             import os
+            prev_cwd = Path.cwd()
             os.chdir(tmp)
-            metrics_dir = Path(tmp) / "artifacts" / "metrics"
-            metrics_dir.mkdir(parents=True)
+            try:
+                metrics_dir = Path(tmp) / "artifacts" / "metrics"
+                metrics_dir.mkdir(parents=True)
 
-            old_timestamp = (dt.datetime.now() - dt.timedelta(hours=2)).isoformat()
-            record = MetricRecord.from_execution(
-                function_id="bg-removal",
-                metric_name="latency",
-                value=150.5,
-                unit="ms",
-                run_id="run-test",
-                producer="test-agent"
-            )
-            record.timestamp = old_timestamp
+                old_timestamp = (dt.datetime.now() - dt.timedelta(hours=2)).isoformat()
+                record = MetricRecord.from_execution(
+                    function_id="bg-removal",
+                    metric_name="latency",
+                    value=150.5,
+                    unit="ms",
+                    run_id="run-test",
+                    producer="test-agent"
+                )
+                record.timestamp = old_timestamp
 
-            with (metrics_dir / "bg-removal__latency__run-test.jsonl").open("w") as f:
-                f.write(json.dumps(record.to_dict()) + "\n")
+                with (metrics_dir / "bg-removal__latency__run-test.jsonl").open("w") as f:
+                    f.write(json.dumps(record.to_dict()) + "\n")
 
-            checker = MetricsGovernanceChecker(max_age_seconds=3600)
-            status = checker.check("bg-removal", metrics_dir=metrics_dir)
+                checker = MetricsGovernanceChecker(max_age_seconds=3600)
+                status = checker.check("bg-removal", metrics_dir=metrics_dir)
 
-            self.assertFalse(status.eligible_for_comparison)
-            self.assertTrue(any("stale" in f.finding_id for f in status.findings))
+                self.assertFalse(status.eligible_for_comparison)
+                self.assertTrue(any("stale" in f.finding_id for f in status.findings))
+            finally:
+                os.chdir(prev_cwd)
 
 
 if __name__ == "__main__":
