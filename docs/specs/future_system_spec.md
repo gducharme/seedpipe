@@ -56,7 +56,7 @@ Status: **Implemented** - See `docs/specs/current_system_spec.md#36-metrics-cont
 - `FR-007` Metric records SHALL include: `function_id`, `metric_name`, `value`, `unit`, `timestamp`, `run_id`, and `producer`.
 
 - `FR-008` Metric artifacts SHALL be emitted in a schema-stable format suitable for time-series analysis.
-  - Contract: `docs/specs/phase1/contracts/metrics_contract.json` (row-level)
+  - Contract: `docs/specs/phase1/contracts/metrics_contract.schema.json` (row-level)
   - Contract: `docs/specs/phase1/contracts/function_metric_row.schema.json` (canonical units metadata)
 
 - `FR-009` Metric freshness SHALL be tracked with `last_updated_at`; stale metrics SHALL be detectable by policy.

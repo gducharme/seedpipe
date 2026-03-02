@@ -14,21 +14,39 @@
       "type": "string",
       "format": "date-time"
     },
-    "metrics": {
-      "type": "object",
-      "properties": {
-        "latency": {"type": ["number", "null"]},
-        "cost": {"type": ["number", "null"]},
-        "success_count": {"type": ["integer", "null"]},
-        "failure_count": {"type": ["integer", "null"]},
-        "quality_rating": {"type": ["number", "null"]}
+    "policy_id": {
+      "type": "string"
+    },
+    "max_age_seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "policy_id", "severity", "message"],
+        "properties": {
+          "finding_id": {"type": "string"},
+          "policy_id": {"type": "string"},
+          "severity": {"type": "string", "enum": ["error", "warning"]},
+          "metric_name": {"type": "string"},
+          "message": {"type": "string"}
+        },
+        "additionalProperties": false
       }
     },
-    "reasons": {
-      "type": "array",
-      "items": {"type": "string"}
+    "metrics_present": {
+      "type": "object",
+      "properties": {
+        "latency": {"type": ["boolean", "null"]},
+        "cost": {"type": ["boolean", "null"]},
+        "success_count": {"type": ["boolean", "null"]},
+        "failure_count": {"type": ["boolean", "null"]},
+        "quality_rating": {"type": ["boolean", "null"]}
+      }
     }
   },
-  "required": ["function_id", "eligible_for_comparison", "last_updated_at", "reasons"],
+  "required": ["function_id", "eligible_for_comparison", "last_updated_at", "policy_id", "max_age_seconds", "findings"],
   "additionalProperties": false
 }

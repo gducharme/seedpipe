@@ -15,9 +15,9 @@ class ScaffoldTests(unittest.TestCase):
             root = Path(tmp)
             created = scaffold_project(root)
 
-            self.assertTrue((root / "spec/phase1/pipeline.yaml").exists())
+            self.assertTrue((root / "docs/specs/phase1/pipeline.yaml").exists())
             self.assertTrue((root / "agents.markdown").exists())
-            self.assertTrue((root / "spec/phase1/contracts/manifest.schema.json").exists())
+            self.assertTrue((root / "docs/specs/phase1/contracts/manifest.schema.json").exists())
             self.assertTrue((root / "spec/stages/ingest/items_row.schema.json").exists())
             self.assertTrue((root / "spec/stages/transform/transformed_row.schema.json").exists())
             self.assertTrue((root / "spec/stages/future_review/reviewed_row.schema.json").exists())
@@ -42,8 +42,8 @@ class ScaffoldTests(unittest.TestCase):
 
             result = compile_pipeline(
                 CompilePaths(
-                    pipeline_path=root / "spec/phase1/pipeline.yaml",
-                    contracts_dir=root / "spec/phase1/contracts",
+                    pipeline_path=root / "docs/specs/phase1/pipeline.yaml",
+                    contracts_dir=root / "docs/specs/phase1/contracts",
                     output_dir=root / "generated",
                 )
             )
@@ -75,15 +75,15 @@ class ScaffoldTests(unittest.TestCase):
             root = Path(tmp)
             scaffold_project(root, loop=True)
 
-            pipeline_text = (root / "spec/phase1/pipeline.yaml").read_text()
+            pipeline_text = (root / "docs/specs/phase1/pipeline.yaml").read_text()
             self.assertIn("pipeline_type: looping", pipeline_text)
             self.assertIn("max_loops: 3", pipeline_text)
             self.assertTrue((root / "src" / "stages" / "seed.py").exists())
 
             result = compile_pipeline(
                 CompilePaths(
-                    pipeline_path=root / "spec/phase1/pipeline.yaml",
-                    contracts_dir=root / "spec/phase1/contracts",
+                    pipeline_path=root / "docs/specs/phase1/pipeline.yaml",
+                    contracts_dir=root / "docs/specs/phase1/contracts",
                     output_dir=root / "generated",
                 )
             )

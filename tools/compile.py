@@ -15,9 +15,9 @@ from typing import Any, Literal
 
 
 COMPILER_VERSION = "phase1-mvp"
-DEFAULT_PIPELINE_PATH = Path("spec/phase1/pipeline.yaml")
-DEFAULT_CONTRACTS_DIR = Path("spec/phase1/contracts")
-ALT_CONTRACTS_DIR = Path("docs/spec/phase1/contracts")
+DEFAULT_PIPELINE_PATH = Path("docs/specs/phase1/pipeline.yaml")
+DEFAULT_CONTRACTS_DIR = Path("docs/specs/phase1/contracts")
+ALT_CONTRACTS_DIR = Path("docs/specs/phase1/contracts")
 DEFAULT_OUTPUT_DIR = Path("generated")
 
 
@@ -489,7 +489,39 @@ def load_contracts(paths: CompilePaths) -> dict[str, dict[str, Any]]:
     if missing:
         missing_names = ", ".join(sorted(missing))
         raise CompileError(f"missing required contracts: {missing_names}")
+
+    _validate_metrics_contract_schema(contracts["metrics_contract.schema.json"])
     return contracts
+
+
+def _validate_metrics_contract_schema(schema: dict[str, Any]) -> None:
+    if not isinstance(schema, dict):
+        raise CompileError("metrics_contract.schema.json must be a JSON object")
+    if schema.get("type") != "object":
+        raise CompileError("metrics_contract.schema.json must declare type=object")
+
+    required_fields = {"function_id", "metric_name", "value", "unit", "timestamp", "run_id", "producer"}
+    schema_required = set(schema.get("required", []))
+    missing_required = required_fields - schema_required
+    if missing_required:
+        missing = ", ".join(sorted(missing_required))
+        raise CompileError(f"metrics_contract.schema.json missing required field declarations: {missing}")
+
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        raise CompileError("metrics_contract.schema.json must declare properties object")
+
+    for field in required_fields:
+        if field not in properties:
+            raise CompileError(f"metrics_contract.schema.json missing property definition: {field}")
+
+    metric_name = properties.get("metric_name", {})
+    metric_enum = set(metric_name.get("enum", [])) if isinstance(metric_name, dict) else set()
+    required_metrics = {"latency", "cost", "success_count", "failure_count", "quality_rating"}
+    missing_metrics = required_metrics - metric_enum
+    if missing_metrics:
+        missing = ", ".join(sorted(missing_metrics))
+        raise CompileError(f"metrics_contract.schema.json missing required metric names: {missing}")
 
 
 def resolve_artifact_schemas(ir: PipelineIR, contracts: dict[str, dict[str, Any]]) -> dict[str, str]:
@@ -530,41 +562,45 @@ def generated_banner(meta: dict[str, str]) -> str:
 
 def emit_models_py(contracts: dict[str, dict[str, Any]], meta: dict[str, str]) -> str:
     contracts_json = stable_json(contracts)
-    return (
-        generated_banner(meta)
-        + "from __future__ import annotations\n\n"
-        + "from dataclasses import dataclass\n"
-        + "import json\n"
-        + "from pathlib import Path\n"
-        + "from typing import Any\n\n"
-        + "@dataclass\n"
-        + "class ProducedBy:\n"
-        + "    run_id: str\n"
-        + "    stage_id: str\n"
-        + "    attempt: int = 1\n\n"
-        + "@dataclass\n"
-        + "class ArtifactRef:\n"
-        + "    name: str\n"
-        + "    path: str\n"
-        + "    hash: str\n"
-        + "    schema_version: str\n"
-        + "    produced_by: ProducedBy\n"
-        + "    bytes: int | None = None\n\n"
-        + "@dataclass\n"
-        + "class ItemResult:\n"
-        + "    item_id: str\n"
-        + "    ok: bool\n"
-        + "    error: dict[str, Any] | None = None\n\n"
-        + f"CONTRACTS: dict[str, dict[str, Any]] = json.loads({contracts_json!r})\n"
-        + "\n"
-        + "def get_schema(name: str) -> dict[str, Any]:\n"
-        + "    if name not in CONTRACTS:\n"
-        + "        raise KeyError(f'unknown schema: {name}')\n"
-        + "    return CONTRACTS[name]\n"
-        + "\n"
-        + "def load_json(path: str | Path) -> Any:\n"
-        + "    return json.loads(Path(path).read_text())\n"
-    )
+    body = """from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+from pathlib import Path
+from typing import Any
+
+@dataclass
+class ProducedBy:
+    run_id: str
+    stage_id: str
+    attempt: int = 1
+
+@dataclass
+class ArtifactRef:
+    name: str
+    path: str
+    hash: str
+    schema_version: str
+    produced_by: ProducedBy
+    bytes: int | None = None
+
+@dataclass
+class ItemResult:
+    item_id: str
+    ok: bool
+    error: dict[str, Any] | None = None
+
+CONTRACTS: dict[str, dict[str, Any]] = json.loads({contracts_json})
+
+def get_schema(name: str) -> dict[str, Any]:
+    if name not in CONTRACTS:
+        raise KeyError(f'unknown schema: {{name}}')
+    return CONTRACTS[name]
+
+def load_json(path: str | Path) -> Any:
+    return json.loads(Path(path).read_text())
+"""
+    return generated_banner(meta) + body.format(contracts_json=repr(contracts_json))
 
 
 def python_string_list(values: tuple[str, ...]) -> str:

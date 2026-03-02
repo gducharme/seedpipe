@@ -78,7 +78,7 @@ README defines the expected `pipeline.yaml` model:
 
 ### Inputs
 - CLI args:
-  - `--pipeline` (default `spec/phase1/pipeline.yaml`)
+  - `--pipeline` (default `docs/specs/phase1/pipeline.yaml`)
   - `--contracts-dir` (optional; auto-picks default directories)
   - `--output-dir` (default `generated`)
   - `--no-ir` (disables `generated/ir.json`)
@@ -201,8 +201,8 @@ Compiler does not create or modify source stage implementation files (`src/stage
 Scaffold writes:
 - `agents-readme.markdown` (copied from repo README when available)
 - `agents.markdown` (agent usage guidance)
-- `spec/phase1/pipeline.yaml`
-- `spec/phase1/contracts/*.schema.json`
+- `docs/specs/phase1/pipeline.yaml`
+- `docs/specs/phase1/contracts/*.schema.json`
 - `spec/stages/<stage_id>/*.schema.json` (runtime output schema enforcement defaults)
 - `artifacts/inputs/.gitkeep`
 - `artifacts/outputs/.gitignore`
@@ -213,7 +213,7 @@ Scaffold writes:
 - `src/__init__.py`
 - `src/stages/__init__.py`
 - starter `src/stages/{ingest,transform,publish}.py`
-- when `--loop` is set, scaffold also seeds loop-stage starter code (`src/stages/seed.py`) and a loop-oriented `spec/phase1/pipeline.yaml`
+- when `--loop` is set, scaffold also seeds loop-stage starter code (`src/stages/seed.py`) and a loop-oriented `docs/specs/phase1/pipeline.yaml`
 
 ### Write policy
 - Refuses overwrite by default (raises `FileExistsError`).
@@ -304,6 +304,7 @@ Scaffold writes:
 - Checks required metric dimensions: `latency`, `cost`, `success_count`, `failure_count`, `quality_rating`
 - Detects stale metrics based on configurable `max_age_seconds` policy threshold
 - Produces machine-readable governance findings tied to `function_id` and policy ID (FR-016, FR-017)
+- Emits schema-valid `last_updated_at` values; when no metric rows exist, uses epoch fallback (`1970-01-01T00:00:00+00:00`)
 
 ### 3.6.4 Eligibility Determination (FR-010)
 - Functions missing required metrics are marked ineligible for replacement comparison
@@ -312,9 +313,16 @@ Scaffold writes:
 - `eligible_for_comparison` flag enables agent-vs-incumbant decision logic
 
 ### 3.6.5 Schema Contracts
-- `docs/specs/phase1/contracts/metrics_contract.json`: row-level metric record schema
+- `docs/specs/phase1/contracts/metrics_contract.schema.json`: row-level metric record schema
 - `docs/specs/phase1/contracts/function_metric_governance.schema.json`: governance findings and eligibility result
 - `docs/specs/phase1/contracts/function_metric_row.schema.json`: canonical units metadata for metrics
+- `docs/specs/phase1/contracts/function_metric_status.schema.json`: per-function eligibility/status payload schema (`policy_id`, `max_age_seconds`, `findings`, `metrics_present`)
+
+### 3.6.7 Compile-Time Contract Validation
+- Compiler requires `metrics_contract.schema.json` in phase1 contracts.
+- Compiler validates metrics contract completeness:
+  - required metric row fields (`function_id`, `metric_name`, `value`, `unit`, `timestamp`, `run_id`, `producer`)
+  - required metric name enum entries (`latency`, `cost`, `success_count`, `failure_count`, `quality_rating`)
 
 ### 3.6.6 Runtime API Export
 All metrics utilities are exported from `seedpipe.runtime` for use in generated flows:
