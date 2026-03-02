@@ -137,3 +137,62 @@ def resolve_contract(artifact_name: str, mapping: dict[str, dict[str, str]], sch
     if schema_version.startswith("seedpipe://"):
         return ("json", schema_version)
     return None
+
+
+CANONICAL_TICKET_STATUSES = ["ready", "in_progress", "implemented", "qa_failed", "approved", "rejected", "closed", "reopened"]
+
+VALID_TICKET_STATUS_TRANSITIONS: dict[str, list[str]] = {
+    "ready": ["in_progress"],
+    "in_progress": ["implemented", "rejected"],
+    "implemented": ["qa_failed", "approved"],
+    "qa_failed": ["in_progress", "rejected"],
+    "approved": ["closed", "reopened"],
+    "rejected": ["in_progress", "closed"],
+    "closed": ["reopened"],
+    "reopened": ["in_progress", "closed"],
+}
+
+
+def validate_ticket_status_transition(
+    previous_status: str | None,
+    new_status: str,
+) -> list[ValidationIssue]:
+    """Validate a ticket status transition is allowed."""
+    issues: list[ValidationIssue] = []
+
+    if new_status not in CANONICAL_TICKET_STATUSES:
+        issues.append(ValidationIssue(pointer="/status", message=f"invalid status: {new_status}"))
+        return issues
+
+    if previous_status is not None:
+        if previous_status not in CANONICAL_TICKET_STATUSES:
+            issues.append(ValidationIssue(pointer="/previous_status", message=f"invalid previous_status: {previous_status}"))
+            return issues
+
+        valid_next = VALID_TICKET_STATUS_TRANSITIONS.get(previous_status, [])
+        if new_status not in valid_next:
+            issues.append(
+                ValidationIssue(
+                    pointer="/status",
+                    message=f"invalid status transition from '{previous_status}' to '{new_status}'. Allowed: {valid_next}",
+                )
+            )
+
+    return issues
+
+
+def validate_ticket_row(row: dict[str, Any]) -> list[ValidationIssue]:
+    """Validate a ticket row against the canonical ticket contract."""
+    validator = TinySchemaValidator({})
+    schema_path = Path(__file__).parent.parent.parent / "docs" / "specs" / "phase1" / "contracts" / "ticket_row.schema.json"
+    if not schema_path.exists():
+        return [ValidationIssue(pointer="/", message="ticket_row.schema.json not found")]
+
+    schema = json.loads(schema_path.read_text())
+    issues = validator.validate(row, schema)
+
+    if "previous_status" in row and "status" in row:
+        transition_issues = validate_ticket_status_transition(row.get("previous_status"), row.get("status", ""))
+        issues.extend(transition_issues)
+
+    return issues
