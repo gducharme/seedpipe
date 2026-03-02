@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from seedpipe.tools.types import Manifest
 
@@ -27,7 +28,7 @@ def run_fixture_once(fixture_dir: Path, run_label: str, env_overrides: dict[str,
     env = os.environ.copy()
     if env_overrides:
         env.update(env_overrides)
-    cmd = ["python", str(script), "--fixture-dir", str(fixture_dir), "--workdir", str(workdir), "--run-id", run_label]
+    cmd = [sys.executable, str(script), "--fixture-dir", str(fixture_dir), "--workdir", str(workdir), "--run-id", run_label]
     proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"fixture run failed ({proc.returncode}): {proc.stderr.strip() or proc.stdout.strip()}")
@@ -37,7 +38,7 @@ def run_fixture_once(fixture_dir: Path, run_label: str, env_overrides: dict[str,
     manifest_payload: Any = json.loads(manifest_path.read_text())
     if not isinstance(manifest_payload, dict):
         raise RuntimeError("fixture manifest must be a JSON object")
-    return RunResult(workdir=workdir, manifest_path=manifest_path, manifest=manifest_payload)
+    return RunResult(workdir=workdir, manifest_path=manifest_path, manifest=cast(Manifest, manifest_payload))
 
 
 def run_fixture_allow_failure(
@@ -52,7 +53,7 @@ def run_fixture_allow_failure(
     env = os.environ.copy()
     if env_overrides:
         env.update(env_overrides)
-    cmd = ["python", str(script), "--fixture-dir", str(fixture_dir), "--workdir", str(workdir), "--run-id", run_label]
+    cmd = [sys.executable, str(script), "--fixture-dir", str(fixture_dir), "--workdir", str(workdir), "--run-id", run_label]
     proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
     output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
     return proc.returncode, workdir, output.strip()

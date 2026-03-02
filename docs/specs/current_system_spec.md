@@ -226,7 +226,10 @@ Scaffold writes:
 
 ## 2.5 Other executable script files
 - `tools/verify.py` exists as a wrapper entrypoint to `seedpipe.tools.verify:main`.
-- `tools/agent_loop.py` is a placeholder and currently has no operational loop logic.
+- `tools/agent_loop.py` runs a control loop that repeatedly executes `tools.watch --once` at a fixed interval.
+- Tooling layout is split intentionally:
+  - `/tools`: CLI wrappers and operational entrypoints.
+  - `/seedpipe/tools`: reusable core logic consumed by wrappers/tests.
 
 ## 2.6 `tools.watch` executable behavior
 
@@ -388,7 +391,6 @@ The scaffold tests assert:
 
 - No scheduler or service control plane is implemented.
 - No persistent DB state management; filesystem is authoritative.
-- `tools/agent_loop.py` does not yet implement control-loop behavior.
 - Contract validation beyond compile-time mapping exists in `seedpipe.tools.verify`, but this document focuses on core compile/run/scaffold and tested guarantees.
 - Verifier/runner typed contracts now model manifests, artifact refs, and defects using `TypedDict` + `Literal` aliases (`seedpipe.tools.types`) while preserving runtime behavior.
 - Human-gated stage orchestration (`mode=human_required`) is implemented in compiler/runtime paths and covered by compile/run tests.

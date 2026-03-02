@@ -11,7 +11,7 @@ import datetime as dt
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from seedpipe.tools.types import ArtifactRef, Defect, DefectLocation, DefectType, Manifest
 
@@ -52,14 +52,14 @@ class Verifier:
         }
 
     def _iter_artifacts(self, manifest: Manifest) -> list[ArtifactRef]:
-        refs: list[ArtifactRef] = list(manifest.get("inputs", []))
+        refs: list[ArtifactRef] = list(cast(list[ArtifactRef], manifest.get("inputs", [])))
         for stage in manifest.get("stage_outputs", []):
             for out in stage.get("outputs", []):
-                ref: ArtifactRef = dict(out)
+                ref: ArtifactRef = cast(ArtifactRef, dict(out))
                 ref["_stage_id"] = stage.get("stage_id")
                 refs.append(ref)
         for out in manifest.get("final_outputs", []):
-            refs.append(out)
+            refs.append(cast(ArtifactRef, out))
         return refs
 
     def _validate_data(self, data: Any, schema_id: str, pointer_base: str = "") -> list[ValidationIssue]:
@@ -83,13 +83,19 @@ class Verifier:
                 )
             )
 
+        run_id = str(manifest.get("run_id", ""))
         for ref in self._iter_artifacts(manifest):
             name = ref.get("name", "")
             stage_id = ref.get("_stage_id", ref.get("produced_by", {}).get("stage_id", "global"))
             artifact_path = Path(ref.get("path", ""))
             if not artifact_path.is_absolute():
                 artifact_path = Path.cwd() / artifact_path
-            location = {"run_id": manifest.get("run_id", ""), "stage_id": stage_id, "artifact_name": name, "path": str(artifact_path)}
+            location: DefectLocation = {
+                "run_id": run_id,
+                "stage_id": str(stage_id),
+                "artifact_name": str(name),
+                "path": str(artifact_path),
+            }
             if not artifact_path.exists():
                 self.emit_defect(
                     self.mk_defect(
@@ -164,7 +170,7 @@ class Verifier:
         run_b = run_fixture_once(self.fixture_dir, "determinism")
         self.contract_test(run_a.manifest, run_a.manifest_path)
         self.contract_test(run_b.manifest, run_b.manifest_path)
-        diff = diff_manifests(run_a.manifest, run_b.manifest)
+        diff = diff_manifests(cast(dict[str, Any], run_a.manifest), cast(dict[str, Any], run_b.manifest))
         if not diff["equal"]:
             self.emit_defect(
                 self.mk_defect(
@@ -190,7 +196,7 @@ class Verifier:
             return
         self.contract_test(golden.manifest, golden.manifest_path)
         self.contract_test(resumed.manifest, resumed.manifest_path)
-        diff = diff_manifests(golden.manifest, resumed.manifest)
+        diff = diff_manifests(cast(dict[str, Any], golden.manifest), cast(dict[str, Any], resumed.manifest))
         if not diff["equal"]:
             self.emit_defect(self.mk_defect("resume_mismatch", {"stage_id": "global"}, "Resume run completed but output diverges from golden run.", "Check atomic stage commits and idempotent behavior on rerun.", diff))
 

@@ -67,7 +67,7 @@ class ScaffoldTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             scaffold_project(root)
-            with self.assertRaises(FileExistsError):
+            with self.assertRaisesRegex(FileExistsError, r"--force"):
                 scaffold_project(root)
 
     def test_scaffold_loop_mode_writes_loop_pipeline_and_compiles(self) -> None:

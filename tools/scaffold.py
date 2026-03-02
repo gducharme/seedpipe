@@ -436,7 +436,10 @@ def scaffold_project(target_dir: Path, force: bool = False, loop: bool = False) 
         output_path = target_dir / relative_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         if output_path.exists() and not force:
-            raise FileExistsError(f"refusing to overwrite existing file: {output_path}")
+            raise FileExistsError(
+                f"refusing to overwrite existing file: {output_path}. "
+                "Re-run with --force to overwrite scaffold files."
+            )
         output_path.write_text(content)
         created.append(output_path)
     return created
