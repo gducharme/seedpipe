@@ -103,7 +103,6 @@ seedpipe-scaffold
 This creates:
 
 - `agents.markdown` (agent guidance, including artifact directory expectations and *never edit `generated/` directly*)
-- `agents-readme.markdown` (copy of this repository README for agent context)
 - `docs/specs/phase1/pipeline.yaml`
 - `docs/specs/phase1/contracts/*.schema.json`
 - `spec/stages/<stage_id>/*.schema.json` (default runtime-enforced stage output schemas)

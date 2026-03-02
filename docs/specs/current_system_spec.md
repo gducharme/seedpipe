@@ -79,7 +79,7 @@ README defines the expected `pipeline.yaml` model:
 ### Inputs
 - CLI args:
   - `--pipeline` (default `docs/specs/phase1/pipeline.yaml`)
-  - `--contracts-dir` (optional; auto-picks default directories)
+  - `--contracts-dir` (optional; defaults to `docs/specs/phase1/contracts`)
   - `--output-dir` (default `generated`)
   - `--no-ir` (disables `generated/ir.json`)
 
@@ -199,7 +199,6 @@ Compiler does not create or modify source stage implementation files (`src/stage
 
 ### Files created
 Scaffold writes:
-- `agents-readme.markdown` (copied from repo README when available)
 - `agents.markdown` (agent usage guidance)
 - `docs/specs/phase1/pipeline.yaml`
 - `docs/specs/phase1/contracts/*.schema.json`

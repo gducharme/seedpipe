@@ -4,10 +4,7 @@
 from __future__ import annotations
 
 import argparse
-from importlib import metadata
 from pathlib import Path
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PIPELINE_TEMPLATE = """pipeline_id: example-pipeline
 item_unit: item
@@ -281,20 +278,6 @@ STAGE_MANIFEST_SCHEMA_TEMPLATE = """{
 }
 """
 
-def _load_agents_readme_template() -> str:
-    readme_path = REPO_ROOT / "README.md"
-    if readme_path.exists():
-        return readme_path.read_text()
-    try:
-        package_metadata = metadata.metadata("seedpipe")
-    except metadata.PackageNotFoundError:
-        package_metadata = None
-    if package_metadata is not None:
-        description = package_metadata.get_payload().strip()
-        if description:
-            return f"{description}\n"
-    return "# Seedpipe\n\nProject README was unavailable at scaffold time.\n"
-
 BASE_TEMPLATES = {
     Path("agents.markdown"): """# Seedpipe agent guide
 
@@ -427,7 +410,6 @@ def run_whole(ctx) -> None:
 def scaffold_project(target_dir: Path, force: bool = False, loop: bool = False) -> list[Path]:
     pipeline_template = LOOP_PIPELINE_TEMPLATE if loop else PIPELINE_TEMPLATE
     templates = {
-        Path("agents-readme.markdown"): _load_agents_readme_template(),
         **BASE_TEMPLATES,
         Path("docs/specs/phase1/pipeline.yaml"): pipeline_template,
     }

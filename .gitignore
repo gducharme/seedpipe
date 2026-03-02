@@ -204,6 +204,12 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# Sample scaffold docs copy
+sample/agents-readme.markdown
+
+# Compiler output should never be committed
+generated/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

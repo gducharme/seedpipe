@@ -18,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from seedpipe.tools.io import load_json_object, write_json_object
 from tools.run import run_generated_flow
 
 READY_MARKER = "_READY"
@@ -57,11 +58,7 @@ def _append_event(pipe_root: Path, payload: dict[str, Any]) -> None:
 def _write_status(pipe_root: Path, payload: dict[str, Any]) -> None:
     path = pipe_root / STATUS_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _hash_bytes(payload: bytes) -> str:
-    return hashlib.sha256(payload).hexdigest()
+    write_json_object(path, payload)
 
 
 def _hash_file(path: Path) -> str:
@@ -92,10 +89,7 @@ def _safe_move(source: Path, dest: Path) -> None:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"expected JSON object at {path}")
-    return payload
+    return load_json_object(path)
 
 
 def _bundle_paths(inbox_root: Path, pipeline_id: str) -> list[Path]:
