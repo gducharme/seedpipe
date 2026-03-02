@@ -1,53 +1,61 @@
 # TODO
 
-## Code Quality Issues
+## Design-Pattern Refactor Tasks
 
 ### High Priority
 
-1. **Fix default `unittest` discovery breakage from `generated/` imports**
-   - Running `python3 -m unittest` can import `generated.stages` and fail with:
-     `ModuleNotFoundError: No module named 'seedpipe.generated'`.
-   - Fix:
-     - Standardize test invocation to explicit `tests/` discovery, and/or
-     - prevent `generated/` from being discovered/imported in test runs.
+1. **Remove duplicate `StageContext` class definition in runtime context** `(DONE 2026-03-02)`
+   - File: `seedpipe/runtime/ctx.py`
+   - Why:
+     - The module currently declares `StageContext` twice; the latter shadows the former.
+     - This creates dead code and increases maintenance risk.
    - Acceptance:
-     - `python3 -m unittest` (or documented default command) runs cleanly without generated-module import failures.
+     - only one `StageContext` declaration remains,
+     - runtime context tests continue to pass.
 
-2. **Make YAML dependency failures explicit in compiler**
-   - `tools.compile.load_pipeline()` falls back to `json.loads` when `PyYAML` is missing, causing confusing `JSONDecodeError` for YAML files.
-   - Fix:
-     - emit a clear error when YAML input is detected but `PyYAML` is unavailable, or
-     - enforce/install `PyYAML` in all supported runtime/test environments.
+2. **Split compiler flow generation by stage strategy** `(IN PROGRESS)`
+   - File: `tools/compile.py` (`emit_flow_py`)
+   - Pattern:
+     - Template Method + Strategy for stage-mode-specific generation (`whole_run`, `per_item`, `human_required`).
    - Acceptance:
-     - Missing `PyYAML` produces a clear actionable compile error (not raw JSON parse failure).
+     - stage-mode code generation lives in isolated helpers/strategies,
+     - generated flow behavior stays test-equivalent.
+
+3. **Introduce a code-emission builder for generated Python source** `(DONE 2026-03-02)`
+   - File: `tools/compile.py`
+   - Pattern:
+     - Builder for indentation-aware source assembly instead of long concatenation chains.
+   - Acceptance:
+     - `emit_flow_py` and stage wrapper generation no longer rely on monolithic string concatenation.
 
 ### Medium Priority
 
-3. **Consolidate metric contract file naming in docs/specs phase1 contracts**
-   - Both files exist:
-     - `docs/specs/phase1/contracts/metrics_contract.json`
-     - `docs/specs/phase1/contracts/metrics_contract.schema.json`
-   - Runtime resolver still checks both paths.
-   - Fix:
-     - choose one canonical file (prefer `.schema.json`),
-     - remove duplicate,
-     - simplify resolver fallbacks and docs references.
+4. **Extract run-manifest repository/model API** `(DONE 2026-03-02)`
+   - Files: `tools/run.py`, generated flow emitted by `tools/compile.py`
+   - Pattern:
+     - Repository + Value Object for manifest read/write, row access, and completion/resume semantics.
    - Acceptance:
-     - single canonical metrics contract file remains; tests and runtime resolution continue to pass.
+     - manifest shape checks and status transitions are centralized behind one API.
 
-4. **Narrow broad exception handling in watcher**
-   - `tools/watch.py` uses multiple broad `except Exception` handlers.
-   - Fix:
-     - narrow exception classes where possible,
-     - preserve detailed context in status/events for unrecoverable failures.
+5. **Refactor watcher bundle lifecycle into explicit states** `(DONE 2026-03-02)`
+   - File: `tools/watch.py`
+   - Pattern:
+     - State pattern for `ready`, `claimed`, `rejected`, `done`, `stale-reclaimed`.
    - Acceptance:
-     - watcher behavior remains stable, and failure diagnostics are more specific and consistent.
+     - lifecycle transitions are explicit and tested by state transitions, not scattered conditionals.
 
 ### Low Priority
 
-5. **Keep TODO document lean and issue-like**
-   - Avoid stale headings or “already done” entries.
-   - Fix:
-     - keep only active backlog items with priority, owner (if known), and acceptance criteria.
+6. **Modularize compile validation as validator chain**
+   - File: `tools/compile.py` (`validate_pipeline_structure`)
+   - Pattern:
+     - Chain of Responsibility for top-level, stage-level, loop, and human-required validation slices.
    - Acceptance:
-     - TODO contains only actionable open items.
+     - compile validation logic is split into composable validators with unchanged error quality.
+
+7. **Replace artifact schema mapping conditionals with specs**
+   - File: `tools/compile.py` (`resolve_artifact_schemas`)
+   - Pattern:
+     - Specification pattern for artifact-to-schema rules.
+   - Acceptance:
+     - mapping rules are declared as ordered specs, minimizing hardcoded branching.

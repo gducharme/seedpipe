@@ -257,6 +257,18 @@ Scaffold writes:
   - `trigger.json`
 - Invalid bundles are moved to `inbox/<pipeline_id>/.rejected/<bundle_id>/` with `.reason.json`.
 
+## 4) Maintenance Notes
+
+- Runtime context module (`seedpipe/runtime/ctx.py`) now maintains a single canonical `StageContext` class definition.
+- A duplicate shadowed `StageContext` declaration was removed to reduce dead code and ambiguity in runtime behavior.
+- Compiler flow generation (`tools/compile.py`) now extracts stage-invocation grouping and stage module-name normalization into dedicated helpers to reduce branching complexity ahead of stage-strategy modularization.
+- Compiler flow generation now also extracts mode-specific stage call emission (`human_required`, `whole_run`, `per_item`) plus shared completion/error blocks into helper functions to reduce orchestration complexity in `emit_flow_py`.
+- Compiler emitters now use a shared `CodeBuilder` utility, and `emit_flow_py` no longer uses a monolithic concatenated string path; output assembly is chunked into explicit builder sections (imports/constants/helper blocks/run loop tail).
+- Run-manifest handling is now centralized behind repository-style APIs in both:
+  - `tools/run.py` (`RunManifestRepository` for load/seed/completion/resume decisions),
+  - generated runtime helper code emitted by `tools/compile.py` (`RunManifestRepository` + `_MANIFEST_REPO`).
+- Watcher bundle lifecycle transitions are now represented by explicit states (`ready`, `claimed`, `rejected`, `done`) and centralized transition helpers in `tools/watch.py` (`BundleState`, `_transition_bundle_state`), rather than ad-hoc path movement at each call site.
+
 ### Claim / process lifecycle
 - Claims by atomic rename into `inbox/<pipeline_id>/.claimed/<bundle_id>.<watcher_id>`.
 - Writes `.claim.json` immediately after claim.
