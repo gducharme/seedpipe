@@ -106,10 +106,10 @@ class MetricsValidator:
     def _resolve_schema_path() -> Path:
         module_root = Path(__file__).resolve().parents[2]
         candidates = [
+            module_root / "docs" / "specs" / "phase1" / "contracts" / "metrics_contract.schema.json",
             module_root / "docs" / "specs" / "phase1" / "contracts" / "metrics_contract.json",
-            module_root / "spec" / "phase1" / "contracts" / "metrics_contract.schema.json",
+            Path("docs/specs/phase1/contracts/metrics_contract.schema.json"),
             Path("docs/specs/phase1/contracts/metrics_contract.json"),
-            Path("spec/phase1/contracts/metrics_contract.schema.json"),
         ]
         for path in candidates:
             if path.exists():
@@ -182,13 +182,14 @@ class MetricsGovernanceChecker:
     def __init__(self, max_age_seconds: int = 3600):
         self.max_age_seconds = max_age_seconds
         self.required_metrics = ["latency", "cost", "success_count", "failure_count", "quality_rating"]
+        self._empty_timestamp = "1970-01-01T00:00:00+00:00"
 
     def check(self, function_id: str, metrics_dir: Path | None = None) -> FunctionMetricStatus:
         if not metrics_dir or not metrics_dir.exists():
             return FunctionMetricStatus(
                 function_id=function_id,
                 eligible_for_comparison=False,
-                last_updated_at="",
+                last_updated_at=self._empty_timestamp,
                 policy_id="FR-016",
                 max_age_seconds=self.max_age_seconds,
                 findings=[GovernanceFinding(
@@ -259,7 +260,7 @@ class MetricsGovernanceChecker:
         return FunctionMetricStatus(
             function_id=function_id,
             eligible_for_comparison=eligible,
-            last_updated_at=latest_timestamp.isoformat() if latest_timestamp else "",
+            last_updated_at=latest_timestamp.isoformat() if latest_timestamp else self._empty_timestamp,
             policy_id="FR-016",
             max_age_seconds=self.max_age_seconds,
             findings=findings + stale_findings,

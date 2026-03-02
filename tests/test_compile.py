@@ -7,6 +7,20 @@ from pathlib import Path
 
 from tools.compile import CompileError, CompilePaths, build_ir, compile_pipeline, normalize_pipeline, validate_pipeline_structure
 
+METRICS_CONTRACT_SCHEMA = {
+    "type": "object",
+    "required": ["function_id", "metric_name", "value", "unit", "timestamp", "run_id", "producer"],
+    "properties": {
+        "function_id": {"type": "string"},
+        "metric_name": {"type": "string", "enum": ["latency", "cost", "success_count", "failure_count", "quality_rating"]},
+        "value": {"type": "number"},
+        "unit": {"type": "string", "enum": ["ms", "USD", "count", "1-5"]},
+        "timestamp": {"type": "string"},
+        "run_id": {"type": "string"},
+        "producer": {"type": "string"},
+    },
+}
+
 
 class CompilePipelineTests(unittest.TestCase):
     def test_normalize_pipeline_applies_defaults(self) -> None:
@@ -672,7 +686,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -758,7 +772,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -815,7 +829,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -868,7 +882,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -920,7 +934,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -977,7 +991,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -1036,7 +1050,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -1155,7 +1169,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
                 "transformed_rewrites.schema.json": {"type": "object"},
                 "reviewed_rewrites.schema.json": {"type": "object"},
                 "review_summary.schema.json": {"type": "object"},
@@ -1220,7 +1234,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))

@@ -2,8 +2,8 @@
 
 - Never edit files under `generated/`; they are compiler output and will be overwritten.
 - Put hand-written stage logic in `src/stages/*.py`.
-- If pipeline structure changes, update `spec/phase1/pipeline.yaml` and re-run `seedpipe-compile`.
-- Keep contract schemas in `spec/phase1/contracts/` in sync with artifact formats.
+- If pipeline structure changes, update `docs/specs/phase1/pipeline.yaml` and re-run `seedpipe-compile`.
+- Keep contract schemas in `docs/specs/phase1/contracts/` in sync with artifact formats.
 - `artifacts/inputs/` should contain the artifacts required to start a run.
 - `artifacts/outputs/<run_id>/` should contain stage artifacts for that specific run ID.
 - CLI entrypoints may be unavailable until installation; use `python -m tools.scaffold|compile|run` from a checkout.
@@ -11,7 +11,7 @@
 
 ## Practical implementation notes
 
-- After stage-order edits in `spec/phase1/pipeline.yaml`, use a new `run-id`. Reusing an old run ID can fail with `ValueError: run manifest stage order does not match compiled flow`.
+- After stage-order edits in `docs/specs/phase1/pipeline.yaml`, use a new `run-id`. Reusing an old run ID can fail with `ValueError: run manifest stage order does not match compiled flow`.
 - Runtime schema validation loads declared output payloads as JSON. Declaring `.txt`, `.md`, or `.csv` outputs with schemas can fail at JSON parsing.
 - Preferred output pattern:
   - Keep machine-contract outputs in JSON artifacts declared in `pipeline.yaml`.

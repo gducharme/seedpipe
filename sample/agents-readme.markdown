@@ -40,7 +40,7 @@ without changing the core model.
 ## Roadmap tracking docs
 
 - Phase 4 agent-operable control plane tracking doc: `docs/phase3_agent_control_plane.md`
-- Future human-gated stage contract (proposed): `spec/phase1/human_required_stage_contract.md`
+- Future human-gated stage contract (proposed): `docs/specs/phase1/human_required_stage_contract.md`
 
 ## Install from a local path
 
@@ -102,8 +102,8 @@ This creates:
 
 - `agents.markdown` (agent guidance, including artifact directory expectations and *never edit `generated/` directly*)
 - `agents-readme.markdown` (copy of this repository README for agent context)
-- `spec/phase1/pipeline.yaml`
-- `spec/phase1/contracts/*.schema.json`
+- `docs/specs/phase1/pipeline.yaml`
+- `docs/specs/phase1/contracts/*.schema.json`
 - `spec/stages/<stage_id>/*.schema.json` (default runtime-enforced stage output schemas)
 - `artifacts/inputs/.gitkeep`
 - `artifacts/outputs/.gitkeep`
@@ -271,7 +271,7 @@ stages:
 
 ## `pipeline.yaml` reference and design guidance
 
-`spec/phase1/pipeline.yaml` is the pipeline contract used by the compiler. It can be written as YAML (recommended for readability) or JSON (valid YAML). The compiler loads this file, normalizes defaults, validates structure, and emits runnable code under `generated/`.
+`docs/specs/phase1/pipeline.yaml` is the pipeline contract used by the compiler. It can be written as YAML (recommended for readability) or JSON (valid YAML). The compiler loads this file, normalizes defaults, validates structure, and emits runnable code under `generated/`.
 
 ### Top-level fields
 
@@ -436,7 +436,7 @@ The expanded result is still validated using normal Phase-1 rules (`inputs`/`out
 - Start simple: `ingest` → one or more transforms → validation/publish.
 - Use `per_item` only when input rows have stable `item_id` values.
 - Keep `stages` linear and explicit; avoid overloading one stage with too many responsibilities.
-- Keep contracts in `spec/phase1/contracts` aligned with emitted artifact formats.
+- Keep contracts in `docs/specs/phase1/contracts` aligned with emitted artifact formats.
 - Re-run the compiler after any `pipeline.yaml` change.
 - Do not hand-edit `generated/`; it is compiler-owned output.
 
@@ -446,15 +446,15 @@ Run the compiler against a pipeline file and contracts directory:
 
 ```bash
 seedpipe-compile \
-  --pipeline ./spec/phase1/pipeline.yaml \
-  --contracts-dir ./spec/phase1/contracts \
+  --pipeline ./docs/specs/phase1/pipeline.yaml \
+  --contracts-dir ./docs/specs/phase1/contracts \
   --output-dir ./generated
 ```
 
 This generates orchestration/runtime code and metadata in `./generated`.
 
-If your repository uses the default layout (`spec/phase1/pipeline.yaml`,
-`spec/phase1/contracts`, `generated`), run:
+If your repository uses the default layout (`docs/specs/phase1/pipeline.yaml`,
+`docs/specs/phase1/contracts`, `generated`), run:
 
 ```bash
 python -m tools.compile
@@ -560,8 +560,8 @@ from tools.compile import CompilePaths, compile_pipeline
 
 result = compile_pipeline(
     CompilePaths(
-        pipeline_path=Path("spec/phase1/pipeline.yaml"),
-        contracts_dir=Path("spec/phase1/contracts"),
+        pipeline_path=Path("docs/specs/phase1/pipeline.yaml"),
+        contracts_dir=Path("docs/specs/phase1/contracts"),
         output_dir=Path("generated"),
     )
 )

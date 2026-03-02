@@ -9,6 +9,20 @@ from pathlib import Path
 from tools.compile import CompilePaths, compile_pipeline
 from tools.run import run_generated_flow
 
+METRICS_CONTRACT_SCHEMA = {
+    "type": "object",
+    "required": ["function_id", "metric_name", "value", "unit", "timestamp", "run_id", "producer"],
+    "properties": {
+        "function_id": {"type": "string"},
+        "metric_name": {"type": "string", "enum": ["latency", "cost", "success_count", "failure_count", "quality_rating"]},
+        "value": {"type": "number"},
+        "unit": {"type": "string", "enum": ["ms", "USD", "count", "1-5"]},
+        "timestamp": {"type": "string"},
+        "run_id": {"type": "string"},
+        "producer": {"type": "string"},
+    },
+}
+
 
 
 class RunCommandTests(unittest.TestCase):
@@ -458,7 +472,7 @@ def run_whole(ctx: StageContext) -> None:
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -586,7 +600,7 @@ def run_whole(ctx) -> None:
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -691,7 +705,7 @@ def run_whole(ctx) -> None:
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -781,7 +795,7 @@ def run_whole(ctx) -> None:
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
-                "metrics_contract.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": METRICS_CONTRACT_SCHEMA,
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))

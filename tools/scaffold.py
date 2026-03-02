@@ -300,8 +300,8 @@ BASE_TEMPLATES = {
 
 - Never edit files under `generated/`; they are compiler output and will be overwritten.
 - Put hand-written stage logic in `src/stages/*.py`.
-- If pipeline structure changes, update `spec/phase1/pipeline.yaml` and re-run `seedpipe-compile`.
-- Keep contract schemas in `spec/phase1/contracts/` in sync with artifact formats.
+- If pipeline structure changes, update `docs/specs/phase1/pipeline.yaml` and re-run `seedpipe-compile`.
+- Keep contract schemas in `docs/specs/phase1/contracts/` in sync with artifact formats.
 - `artifacts/inputs/` should contain the artifacts required to start a run.
 - `artifacts/outputs/<run_id>/` should contain stage artifacts for that specific run ID.
 - CLI entrypoints may be unavailable until installation; use `python -m tools.scaffold|compile|run` from a checkout.
@@ -309,7 +309,7 @@ BASE_TEMPLATES = {
 
 ## Practical implementation notes
 
-- After stage-order edits in `spec/phase1/pipeline.yaml`, use a new `run-id`. Reusing an old run ID can fail with `ValueError: run manifest stage order does not match compiled flow`.
+- After stage-order edits in `docs/specs/phase1/pipeline.yaml`, use a new `run-id`. Reusing an old run ID can fail with `ValueError: run manifest stage order does not match compiled flow`.
 - Runtime schema validation loads declared output payloads as JSON. Declaring `.txt`, `.md`, or `.csv` outputs with schemas can fail at JSON parsing.
 - Preferred output pattern:
   - Keep machine-contract outputs in JSON artifacts declared in `pipeline.yaml`.
@@ -332,11 +332,11 @@ BASE_TEMPLATES = {
   - Confirm produced output payload shape matches declared stage schema.
   - Use a new `run-id` after stage-graph edits.
 """,
-    Path("spec/phase1/contracts/artifact_ref.schema.json"): ARTIFACT_REF_SCHEMA_TEMPLATE,
-    Path("spec/phase1/contracts/item_state_row.schema.json"): ITEM_STATE_SCHEMA_TEMPLATE,
-    Path("spec/phase1/contracts/items_row.schema.json"): ITEMS_ROW_SCHEMA_TEMPLATE,
-    Path("spec/phase1/contracts/manifest.schema.json"): MANIFEST_SCHEMA_TEMPLATE,
-    Path("spec/phase1/contracts/metrics_contract.schema.json"): METRICS_CONTRACT_SCHEMA_TEMPLATE,
+    Path("docs/specs/phase1/contracts/artifact_ref.schema.json"): ARTIFACT_REF_SCHEMA_TEMPLATE,
+    Path("docs/specs/phase1/contracts/item_state_row.schema.json"): ITEM_STATE_SCHEMA_TEMPLATE,
+    Path("docs/specs/phase1/contracts/items_row.schema.json"): ITEMS_ROW_SCHEMA_TEMPLATE,
+    Path("docs/specs/phase1/contracts/manifest.schema.json"): MANIFEST_SCHEMA_TEMPLATE,
+    Path("docs/specs/phase1/contracts/metrics_contract.schema.json"): METRICS_CONTRACT_SCHEMA_TEMPLATE,
     Path("spec/stages/ingest/items_row.schema.json"): STAGE_ITEMS_ROW_SCHEMA_TEMPLATE,
     Path("spec/stages/seed/items_row.schema.json"): STAGE_SEEDED_ROW_SCHEMA_TEMPLATE,
     Path("spec/stages/transform/transformed_row.schema.json"): STAGE_TRANSFORMED_ROW_SCHEMA_TEMPLATE,
@@ -429,7 +429,7 @@ def scaffold_project(target_dir: Path, force: bool = False, loop: bool = False) 
     templates = {
         Path("agents-readme.markdown"): _load_agents_readme_template(),
         **BASE_TEMPLATES,
-        Path("spec/phase1/pipeline.yaml"): pipeline_template,
+        Path("docs/specs/phase1/pipeline.yaml"): pipeline_template,
     }
     created: list[Path] = []
     for relative_path, content in templates.items():

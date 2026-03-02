@@ -23,8 +23,8 @@ class SampleIntegrationTests(unittest.TestCase):
 
             compile_result = compile_pipeline(
                 CompilePaths(
-                    pipeline_path=workdir / "spec/phase1/pipeline.json",
-                    contracts_dir=workdir / "spec/phase1/contracts",
+                    pipeline_path=workdir / "docs/specs/phase1/pipeline.json",
+                    contracts_dir=workdir / "docs/specs/phase1/contracts",
                     output_dir=workdir / "generated",
                 )
             )
