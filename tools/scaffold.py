@@ -194,6 +194,33 @@ MANIFEST_SCHEMA_TEMPLATE = """{
 }
 """
 
+METRICS_CONTRACT_SCHEMA_TEMPLATE = """{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Metrics Contract",
+  "description": "Schema for function-level metrics artifacts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["function_id", "metric_name", "value", "unit", "timestamp", "run_id", "producer"],
+  "properties": {
+    "function_id": { "type": "string", "description": "Stable identifier for the function being measured" },
+    "metric_name": {
+      "type": "string",
+      "description": "Name of the metric being reported",
+      "enum": ["latency", "cost", "success_count", "failure_count", "quality_rating"]
+    },
+    "value": { "type": "number", "description": "Numeric value of the metric" },
+    "unit": {
+      "type": "string",
+      "description": "Unit of measurement (must be one of: ms, USD, count, 1-5)",
+      "enum": ["ms", "USD", "count", "1-5"]
+    },
+    "timestamp": { "type": "string", "format": "date-time", "description": "ISO 8601 timestamp when metric was recorded" },
+    "run_id": { "type": "string", "description": "Run ID this metric belongs to" },
+    "producer": { "type": "string", "description": "Identifier of the agent or system producing this metric" }
+  }
+}
+"""
+
 
 
 
@@ -309,6 +336,7 @@ BASE_TEMPLATES = {
     Path("spec/phase1/contracts/item_state_row.schema.json"): ITEM_STATE_SCHEMA_TEMPLATE,
     Path("spec/phase1/contracts/items_row.schema.json"): ITEMS_ROW_SCHEMA_TEMPLATE,
     Path("spec/phase1/contracts/manifest.schema.json"): MANIFEST_SCHEMA_TEMPLATE,
+    Path("spec/phase1/contracts/metrics_contract.schema.json"): METRICS_CONTRACT_SCHEMA_TEMPLATE,
     Path("spec/stages/ingest/items_row.schema.json"): STAGE_ITEMS_ROW_SCHEMA_TEMPLATE,
     Path("spec/stages/seed/items_row.schema.json"): STAGE_SEEDED_ROW_SCHEMA_TEMPLATE,
     Path("spec/stages/transform/transformed_row.schema.json"): STAGE_TRANSFORMED_ROW_SCHEMA_TEMPLATE,
