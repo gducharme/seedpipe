@@ -1,5 +1,31 @@
 # Repository Agent Notes
 
+## Development Environment
+
+This project requires Python 3.10+ to use `NotRequired` from typing. Use [mise](https://mise.jdx.dev/) to manage Python versions:
+
+```bash
+mise install python@3.10
+mise use python@3.10
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+## Testing
+
+Run tests with unittest or pytest:
+
+```bash
+# Using mise Python runtime
+mise run python -m unittest discover tests
+
+# Or using pytest if available
+pytest tests/ -v
+```
+
+## Code Quality
+
 - Any new feature or code fix should include a corresponding entry in the docs specs document.
 - Any code change should at least increment the patch version; for larger features, consider incrementing the minor version.
 - Before building or modifying a pipe, read `pipeline.yaml` to understand the format, requirements, and stage graph that the pipeline is supposed to satisfy.

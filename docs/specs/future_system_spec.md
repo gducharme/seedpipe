@@ -43,17 +43,29 @@ Out of scope:
 - `FR-004` The function graph SHALL support lookup by `function_id`, `capability_tag`, and `owner`.
 - `FR-005` Seedpipe SHALL mark any operational function missing required metadata as non-compliant.
 
-### 3.2 Function Metric Contract
+### 3.2 Function Metric Contract (IMPLEMENTED)
+Status: **Implemented** - See `docs/specs/current_system_spec.md#36-metrics-contract-fr-006fr-010`
+
 - `FR-006` Each function SHALL publish machine-readable metrics for at least:
-  - latency
-  - cost
-  - success count
-  - failure count
-  - quality rating
+  - latency (`ms`)
+  - cost (`USD`)
+  - success count (`count`)
+  - failure count (`count`)
+  - quality rating (`1-5`)
+  
 - `FR-007` Metric records SHALL include: `function_id`, `metric_name`, `value`, `unit`, `timestamp`, `run_id`, and `producer`.
+
 - `FR-008` Metric artifacts SHALL be emitted in a schema-stable format suitable for time-series analysis.
+  - Contract: `docs/specs/phase1/contracts/metrics_contract.json` (row-level)
+  - Contract: `docs/specs/phase1/contracts/function_metric_row.schema.json` (canonical units metadata)
+
 - `FR-009` Metric freshness SHALL be tracked with `last_updated_at`; stale metrics SHALL be detectable by policy.
+  - Runtime: `MetricsGovernanceChecker.max_age_seconds` configurable threshold
+  - Contract: `docs/specs/phase1/contracts/function_metric_governance.schema.json`
+
 - `FR-010` Missing required metric dimensions SHALL block a function from "eligible for replacement comparison" status.
+  - Runtime: `MetricsGovernanceChecker.check()` produces `FunctionMetricStatus.eligible_for_comparison` flag
+  - Findings tied to policy IDs (FR-010, FR-009) with severity levels (`error`, `warning`)
 
 ### 3.3 Agent Comparison and Proof
 - `FR-011` A challenger agent SHALL provide comparable metric evidence for the same function and metric window.

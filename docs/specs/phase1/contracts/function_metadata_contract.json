@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Function Metadata Contract",
+  "description": "Schema for function registration and metadata",
+  "type": "object",
+  "properties": {
+    "function_id": {
+      "type": "string",
+      "description": "Stable identifier for the function"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable function name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of what the function does"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Team or individual responsible for the function"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["experimental", "active", "deprecated"],
+      "description": "Lifecycle status of the function"
+    },
+    "capability_tags": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Tags for capability-based discovery"
+    },
+    "last_updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this metadata was last updated"
+    }
+  },
+  "required": ["function_id", "name", "description", "owner", "status"],
+  "additionalProperties": false
+}

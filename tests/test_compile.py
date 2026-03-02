@@ -672,6 +672,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -757,6 +758,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -813,6 +815,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -865,6 +868,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -916,6 +920,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -972,6 +977,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -1030,6 +1036,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -1148,6 +1155,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
                 "transformed_rewrites.schema.json": {"type": "object"},
                 "reviewed_rewrites.schema.json": {"type": "object"},
                 "review_summary.schema.json": {"type": "object"},
@@ -1212,6 +1220,7 @@ stages: []
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))

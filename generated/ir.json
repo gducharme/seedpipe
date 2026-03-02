@@ -1,0 +1,124 @@
+{
+  "artifact_producers": {
+    "items.jsonl": "ingest",
+    "published_manifest.json": "publish",
+    "reviewed_report.json": "future_review",
+    "transformed.jsonl": "transform",
+    "validation_report.json": "validate"
+  },
+  "determinism_policy": "strict",
+  "item_unit": "item",
+  "max_loops": 0,
+  "pipeline_id": "phase1-default",
+  "pipeline_type": "straight",
+  "stages": [
+    {
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "items.jsonl",
+          "pattern": "items.jsonl"
+        }
+      ],
+      "go_to": null,
+      "inputs": [],
+      "instructions": null,
+      "keys": [],
+      "mode": "whole_run",
+      "outputs": [
+        "items.jsonl"
+      ],
+      "placeholder": false,
+      "reentry": null,
+      "stage_id": "ingest"
+    },
+    {
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "transformed.jsonl",
+          "pattern": "transformed.jsonl"
+        }
+      ],
+      "go_to": null,
+      "inputs": [
+        "items.jsonl"
+      ],
+      "instructions": null,
+      "keys": [],
+      "mode": "per_item",
+      "outputs": [
+        "transformed.jsonl"
+      ],
+      "placeholder": false,
+      "reentry": null,
+      "stage_id": "transform"
+    },
+    {
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "validation_report.json",
+          "pattern": "validation_report.json"
+        }
+      ],
+      "go_to": null,
+      "inputs": [
+        "transformed.jsonl"
+      ],
+      "instructions": null,
+      "keys": [],
+      "mode": "whole_run",
+      "outputs": [
+        "validation_report.json"
+      ],
+      "placeholder": false,
+      "reentry": null,
+      "stage_id": "validate"
+    },
+    {
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "reviewed_report.json",
+          "pattern": "reviewed_report.json"
+        }
+      ],
+      "go_to": null,
+      "inputs": [
+        "validation_report.json"
+      ],
+      "instructions": null,
+      "keys": [],
+      "mode": "whole_run",
+      "outputs": [
+        "reviewed_report.json"
+      ],
+      "placeholder": true,
+      "reentry": null,
+      "stage_id": "future_review"
+    },
+    {
+      "expected_outputs": [
+        {
+          "keys": {},
+          "path": "published_manifest.json",
+          "pattern": "published_manifest.json"
+        }
+      ],
+      "go_to": null,
+      "inputs": [
+        "reviewed_report.json"
+      ],
+      "instructions": null,
+      "keys": [],
+      "mode": "whole_run",
+      "outputs": [
+        "published_manifest.json"
+      ],
+      "placeholder": false,
+      "reentry": null,
+      "stage_id": "publish"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Function Metric Row",
+  "description": "Schema for a single metric record row in function metrics artifacts",
+  "type": "object",
+  "properties": {
+    "function_id": {
+      "type": "string",
+      "description": "Stable identifier for the function being measured"
+    },
+    "metric_name": {
+      "type": "string",
+      "enum": ["latency", "cost", "success_count", "failure_count", "quality_rating"],
+      "description": "Name of the metric being reported"
+    },
+    "value": {
+      "type": "number",
+      "description": "Numeric value of the metric"
+    },
+    "unit": {
+      "type": "string",
+      "enum": ["ms", "USD", "count", "1-5"],
+      "description": "Unit of measurement"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when metric was recorded"
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Run ID this metric belongs to"
+    },
+    "producer": {
+      "type": "string",
+      "description": "Identifier of the agent or system producing this metric"
+    }
+  },
+  "required": ["function_id", "metric_name", "value", "unit", "timestamp", "run_id", "producer"],
+  "additionalProperties": false,
+  "meta": {
+    "canonical_units": {
+      "latency": "ms",
+      "cost": "USD",
+      "success_count": "count",
+      "failure_count": "count",
+      "quality_rating": "1-5"
+    }
+  }
+}
