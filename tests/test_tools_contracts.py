@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from seedpipe.tools.contracts import TinySchemaValidator, load_schema_store, resolve_contract
+from seedpipe.tools.contracts import TinySchemaValidator, load_schema_store, resolve_contract, validate_ticket_status_transition
 
 
 class TinySchemaValidatorTests(unittest.TestCase):
@@ -68,6 +68,43 @@ manifest.json:
             ("json", "seedpipe://spec/phase1/contracts/custom.schema.json"),
         )
         self.assertIsNone(resolve_contract("unknown", {}, "v1"))
+
+
+class TicketStatusTransitionTests(unittest.TestCase):
+    def test_valid_transition_ready_to_in_progress(self) -> None:
+        issues = validate_ticket_status_transition("ready", "in_progress")
+        self.assertEqual(len(issues), 0)
+
+    def test_valid_transition_implemented_to_approved(self) -> None:
+        issues = validate_ticket_status_transition("implemented", "approved")
+        self.assertEqual(len(issues), 0)
+
+    def test_valid_transition_approved_to_closed(self) -> None:
+        issues = validate_ticket_status_transition("approved", "closed")
+        self.assertEqual(len(issues), 0)
+
+    def test_valid_transition_closed_to_reopened(self) -> None:
+        issues = validate_ticket_status_transition("closed", "reopened")
+        self.assertEqual(len(issues), 0)
+
+    def test_invalid_transition_ready_to_approved(self) -> None:
+        issues = validate_ticket_status_transition("ready", "approved")
+        self.assertTrue(len(issues) > 0)
+        self.assertIn("invalid status transition", issues[0].message)
+
+    def test_invalid_transition_closed_to_in_progress(self) -> None:
+        issues = validate_ticket_status_transition("closed", "in_progress")
+        self.assertTrue(len(issues) > 0)
+        self.assertIn("invalid status transition", issues[0].message)
+
+    def test_invalid_status_value(self) -> None:
+        issues = validate_ticket_status_transition(None, "invalid_status")
+        self.assertTrue(len(issues) > 0)
+        self.assertIn("invalid status", issues[0].message)
+
+    def test_no_previous_status_is_valid(self) -> None:
+        issues = validate_ticket_status_transition(None, "ready")
+        self.assertEqual(len(issues), 0)
 
 
 if __name__ == "__main__":

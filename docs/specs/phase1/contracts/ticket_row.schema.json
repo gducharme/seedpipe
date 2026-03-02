@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "seedpipe://spec/phase1/contracts/ticket_row.schema.json",
+  "title": "TicketRow",
+  "description": "Canonical ticket row contract for pipelines A/B/C/D",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["ticket_id", "status", "pipeline_stage"],
+  "properties": {
+    "ticket_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for the ticket"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "in_progress", "implemented", "qa_failed", "approved", "rejected", "closed", "reopened"],
+      "description": "Canonical ticket status"
+    },
+    "pipeline_stage": {
+      "type": "string",
+      "enum": ["analysis", "coding", "qa", "progress"],
+      "description": "Pipeline stage that produced this ticket row"
+    },
+    "title": {
+      "type": "string",
+      "description": "Ticket title or summary"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed ticket description"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "assignee": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Evidence or proof artifacts for the ticket"
+    },
+    "previous_status": {
+      "type": "string",
+      "enum": ["ready", "in_progress", "implemented", "qa_failed", "approved", "rejected", "closed", "reopened"],
+      "description": "Previous status for transition validation"
+    },
+    "transition_reason": {
+      "type": "string",
+      "description": "Reason for status transition"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

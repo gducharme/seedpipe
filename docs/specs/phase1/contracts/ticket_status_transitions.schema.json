@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "seedpipe://spec/phase1/contracts/ticket_status_transitions.schema.json",
+  "title": "TicketStatusTransitions",
+  "description": "Valid status transitions for ticket lifecycle in pipelines A/B/C/D",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "transitions": {
+      "type": "object",
+      "description": "Map of valid status transitions",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["ready", "in_progress", "implemented", "qa_failed", "approved", "rejected", "closed", "reopened"]
+        }
+      }
+    },
+    "terminal_states": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["closed", "approved"]
+      },
+      "description": "States that represent terminal points in the lifecycle"
+    },
+    "initial_state": {
+      "type": "string",
+      "const": "ready",
+      "description": "The initial state for new tickets"
+    }
+  }
+}
