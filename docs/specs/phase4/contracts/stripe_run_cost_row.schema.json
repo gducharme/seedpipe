@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Stripe Run Cost Row (Future)",
+  "description": "Proposed Phase 4 contract for reconciled per-run USD cost attribution.",
+  "type": "object",
+  "required": [
+    "stripe_account_id",
+    "run_id",
+    "pipeline_id",
+    "function_id",
+    "amount_usd",
+    "window_start",
+    "window_end",
+    "reconciled_at",
+    "attribution_method",
+    "reconciliation_key"
+  ],
+  "properties": {
+    "stripe_account_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "pipeline_id": {"type": "string", "minLength": 1},
+    "function_id": {"type": "string", "minLength": 1},
+    "amount_usd": {"type": "number"},
+    "source_invoice_ids": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "source_event_ids": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "fx_source_currency": {"type": ["string", "null"], "minLength": 3, "maxLength": 3},
+    "fx_rate_to_usd": {"type": ["number", "null"]},
+    "window_start": {"type": "string", "format": "date-time"},
+    "window_end": {"type": "string", "format": "date-time"},
+    "reconciled_at": {"type": "string", "format": "date-time"},
+    "attribution_method": {"type": "string", "enum": ["run_level_v1"]},
+    "reconciliation_key": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}

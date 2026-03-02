@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Stripe Meter Event Row (Future)",
+  "description": "Proposed Phase 4 contract for normalized Stripe meter events used in run-level attribution.",
+  "type": "object",
+  "required": [
+    "stripe_account_id",
+    "event_id",
+    "meter_name",
+    "event_timestamp",
+    "value",
+    "run_id",
+    "pipeline_id"
+  ],
+  "properties": {
+    "stripe_account_id": {"type": "string", "minLength": 1},
+    "event_id": {"type": "string", "minLength": 1},
+    "meter_name": {"type": "string", "minLength": 1},
+    "event_timestamp": {"type": "string", "format": "date-time"},
+    "value": {"type": "number"},
+    "value_unit": {"type": ["string", "null"]},
+    "run_id": {"type": "string", "minLength": 1},
+    "pipeline_id": {"type": "string", "minLength": 1},
+    "function_id": {"type": ["string", "null"]},
+    "customer_id": {"type": ["string", "null"]},
+    "raw_ref": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}
