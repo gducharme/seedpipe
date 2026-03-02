@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Stripe Reconciliation Report (Future)",
+  "description": "Proposed Phase 4 contract for reconciliation batch summary and finding counts.",
+  "type": "object",
+  "required": [
+    "batch_id",
+    "stripe_account_id",
+    "window_start",
+    "window_end",
+    "processed_invoice_rows",
+    "processed_event_rows",
+    "mapped_run_rows",
+    "unmapped_run_rows",
+    "unmapped_reasons",
+    "fx_policy",
+    "created_at"
+  ],
+  "properties": {
+    "batch_id": {"type": "string", "minLength": 1},
+    "stripe_account_id": {"type": "string", "minLength": 1},
+    "window_start": {"type": "string", "format": "date-time"},
+    "window_end": {"type": "string", "format": "date-time"},
+    "processed_invoice_rows": {"type": "integer", "minimum": 0},
+    "processed_event_rows": {"type": "integer", "minimum": 0},
+    "mapped_run_rows": {"type": "integer", "minimum": 0},
+    "unmapped_run_rows": {"type": "integer", "minimum": 0},
+    "unmapped_reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["reason_code", "count"],
+        "properties": {
+          "reason_code": {"type": "string", "minLength": 1},
+          "count": {"type": "integer", "minimum": 0}
+        },
+        "additionalProperties": false
+      }
+    },
+    "fx_policy": {"type": "string", "minLength": 1},
+    "notes": {"type": ["string", "null"]},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}
