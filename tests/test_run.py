@@ -26,6 +26,38 @@ METRICS_CONTRACT_SCHEMA = {
 
 
 class RunCommandTests(unittest.TestCase):
+    def test_run_generated_flow_seeds_manifest_when_template_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generated_dir = root / "generated"
+            generated_dir.mkdir()
+            inputs_dir = root / "artifacts" / "inputs"
+            inputs_dir.mkdir(parents=True)
+            (inputs_dir / "items.jsonl").write_text('{"item_id":"i-1"}\n')
+            (generated_dir / "flow.py").write_text(
+                """
+PIPELINE_ID = "p-seed"
+STAGES = ["ingest", "publish"]
+
+def run(run_config: dict[str, object], attempt: int = 1) -> int:
+    return 0
+""".strip()
+            )
+
+            output_dir = root / "artifacts" / "outputs" / "seed-run"
+            code = run_generated_flow(
+                generated_dir=generated_dir,
+                run_id="seed-run",
+                output_dir=output_dir,
+                inputs_dir=inputs_dir,
+            )
+
+            self.assertEqual(code, 0)
+            manifest = json.loads((output_dir / ".seedpipe_run_manifest.json").read_text())
+            self.assertEqual(manifest["pipeline_id"], "p-seed")
+            self.assertEqual(manifest["run_id"], "seed-run")
+            self.assertEqual([row["stage_id"] for row in manifest["stages"]], ["ingest", "publish"])
+
     def test_run_generated_flow_executes_compiled_flow_in_run_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

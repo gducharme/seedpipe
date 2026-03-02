@@ -411,11 +411,23 @@ The run tests assert:
 - generated flow can execute and write artifacts.
 - run receives attempt value and run config fields.
 - default output directory resolution works.
+- manifest repository seeding falls back to synthesized default manifest contents when `generated/run_manifest_template.json` is absent.
 - completed run manifest in an existing run directory raises `FileExistsError`.
 - existing incomplete run resumes from manifest failure stage.
 - missing `flow.py` raises `FileNotFoundError`.
 - missing inputs directory raises `FileNotFoundError`.
 - local `src/stages` can be mounted for generated wrappers importing `seedpipe.src.stages.*`.
+
+## 4.4 `tests/test_watch.py` coverage
+The watch tests assert:
+- bundle validation rejects manifest `pipeline_id` mismatches with a specific policy failure.
+- bundle validation rejects manifest `bundle_id` mismatches with a specific policy failure.
+
+## 4.5 `tests/test_runtime_metrics.py` coverage
+The runtime metrics tests assert:
+- `MetricRecord.from_dict` parses serialized metric rows into typed records.
+- metric record construction rejects invalid ISO-8601 timestamps.
+- `GovernanceFinding.from_dict` supports optional `metric_name=None`.
 
 ## 4.3 `tests/test_scaffold.py` coverage
 The scaffold tests assert:

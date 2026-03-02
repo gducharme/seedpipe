@@ -58,6 +58,33 @@ class MetricRecordTests(unittest.TestCase):
         self.assertEqual(d["function_id"], "test-func")
         self.assertEqual(d["value"], 4.2)
 
+    def test_from_dict_parses_payload(self) -> None:
+        record = MetricRecord.from_dict(
+            {
+                "function_id": "bg-removal",
+                "metric_name": "latency",
+                "value": 150.5,
+                "unit": "ms",
+                "timestamp": "2026-03-01T12:00:00Z",
+                "run_id": "run-abc",
+                "producer": "agent-v2",
+            }
+        )
+        self.assertEqual(record.run_id, "run-abc")
+        self.assertEqual(record.metric_name, "latency")
+
+    def test_record_creation_rejects_invalid_timestamp(self) -> None:
+        with self.assertRaises(ValueError):
+            MetricRecord(
+                function_id="bg-removal",
+                metric_name="latency",
+                value=10.0,
+                unit="ms",
+                timestamp="not-a-timestamp",
+                run_id="run-1",
+                producer="agent-v1",
+            )
+
 
 class MetricsValidatorTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -161,6 +188,19 @@ class GovernanceFindingTests(unittest.TestCase):
         d = finding.to_dict()
         self.assertEqual(d["finding_id"], "test-finding")
         self.assertEqual(d["severity"], "error")
+
+    def test_finding_from_dict_parses_metric_name_none(self) -> None:
+        finding = GovernanceFinding.from_dict(
+            {
+                "finding_id": "missing-latency",
+                "policy_id": "FR-010",
+                "severity": "warning",
+                "metric_name": None,
+                "message": "Latency metric missing",
+            }
+        )
+        self.assertIsNone(finding.metric_name)
+        self.assertEqual(finding.severity, "warning")
 
 
 class FunctionMetricStatusTests(unittest.TestCase):
