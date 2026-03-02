@@ -13,6 +13,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,13 @@ STATUS_DIR = Path("watcher")
 EVENTS_FILE = STATUS_DIR / "events.ndjson"
 STATUS_FILE = STATUS_DIR / "status.json"
 OUTBOX_PUBLISH_MARKER = ".seedpipe_outbox_published.json"
+
+
+class BundleState(str, Enum):
+    READY = "ready"
+    CLAIMED = "claimed"
+    REJECTED = "rejected"
+    DONE = "done"
 
 
 @dataclass(frozen=True)
@@ -158,7 +166,7 @@ def _reclaim_stale_claims(config: WatchConfig, pipeline_id: str) -> None:
         original_name = claim.name.split(".", 1)[0]
         restore_target = config.inbox_root / pipeline_id / original_name
         if restore_target.exists():
-            _safe_move(claim, config.inbox_root / pipeline_id / ".rejected" / claim.name)
+            _transition_bundle_state(config, pipeline_id, claim, to_state=BundleState.REJECTED)
             _append_event(
                 config.pipe_root,
                 {
@@ -170,22 +178,50 @@ def _reclaim_stale_claims(config: WatchConfig, pipeline_id: str) -> None:
                 },
             )
             continue
-        _safe_move(claim, restore_target)
+        _transition_bundle_state(config, pipeline_id, claim, to_state=BundleState.READY)
         _append_event(
             config.pipe_root,
             {
                 "ts": _utc_now(),
                 "event": "stale_claim_requeued",
                 "pipeline_id": pipeline_id,
-                "bundle_id": restore_target.name,
+                "bundle_id": original_name,
             },
         )
 
 
+def _bundle_state_target(config: WatchConfig, pipeline_id: str, source: Path, to_state: BundleState) -> Path:
+    if to_state == BundleState.READY:
+        original_name = source.name.split(".", 1)[0]
+        return config.inbox_root / pipeline_id / original_name
+    if to_state == BundleState.CLAIMED:
+        return config.inbox_root / pipeline_id / ".claimed" / source.name
+    if to_state == BundleState.REJECTED:
+        return config.inbox_root / pipeline_id / ".rejected" / source.name
+    if to_state == BundleState.DONE:
+        return config.inbox_root / pipeline_id / ".done" / source.name
+    raise ValueError(f"unsupported bundle state: {to_state}")
+
+
+def _transition_bundle_state(config: WatchConfig, pipeline_id: str, source: Path, *, to_state: BundleState) -> Path:
+    target = _bundle_state_target(config, pipeline_id, source, to_state)
+    _safe_move(source, target)
+    return target
+
+
 def _claim_bundle(config: WatchConfig, pipeline_id: str, bundle_dir: Path, watcher_id: str) -> Path | None:
-    claimed_target = config.inbox_root / pipeline_id / ".claimed" / f"{bundle_dir.name}.{watcher_id}"
+    claim_name = f"{bundle_dir.name}.{watcher_id}"
     try:
-        _safe_move(bundle_dir, claimed_target)
+        claimed_target = _transition_bundle_state(
+            config,
+            pipeline_id,
+            bundle_dir,
+            to_state=BundleState.CLAIMED,
+        )
+        if claimed_target.name != claim_name:
+            canonical_target = claimed_target.parent / claim_name
+            _safe_move(claimed_target, canonical_target)
+            claimed_target = canonical_target
     except FileNotFoundError:
         return None
     except OSError:
@@ -203,8 +239,7 @@ def _claim_bundle(config: WatchConfig, pipeline_id: str, bundle_dir: Path, watch
 
 
 def _reject_claim(config: WatchConfig, pipeline_id: str, claim_dir: Path, reason: str) -> None:
-    target = config.inbox_root / pipeline_id / ".rejected" / claim_dir.name
-    _safe_move(claim_dir, target)
+    target = _transition_bundle_state(config, pipeline_id, claim_dir, to_state=BundleState.REJECTED)
     (target / ".reason.json").write_text(
         json.dumps({"rejected_at": _utc_now(), "reason": reason}, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -543,8 +578,7 @@ def _process_claim(config: WatchConfig, pipeline_id: str, claim_dir: Path) -> in
                 {"ts": _utc_now(), "event": "published", "run_id": run_id, "count": len(published), "bundles": published},
             )
             _publish_completed_run_to_outbox(config, config.outputs_root / run_id)
-            done_dir = config.inbox_root / pipeline_id / ".done" / claim_dir.name
-            _safe_move(claim_dir, done_dir)
+            _transition_bundle_state(config, pipeline_id, claim_dir, to_state=BundleState.DONE)
         return code
     except Exception as exc:
         _reject_claim(config, pipeline_id, claim_dir, f"processing error: {exc}")

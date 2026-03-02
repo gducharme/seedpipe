@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
 import os
 import shutil
 import sys
@@ -102,74 +103,62 @@ def _manifest_path(run_output_dir: Path) -> Path:
     return run_output_dir / RUN_MANIFEST_NAME
 
 
-def _read_json_file(path: Path) -> dict[str, object]:
-    return load_json_object(path)
+class RunManifestRepository:
+    def __init__(self, generated_dir: Path, run_output_dir: Path):
+        self.generated_dir = generated_dir
+        self.run_output_dir = run_output_dir
+        self.path = _manifest_path(run_output_dir)
 
+    def load_or_seed(self, *, run_id: str, stage_ids: list[str], pipeline_id: str) -> dict[str, object]:
+        if self.path.exists():
+            return load_json_object(self.path)
+        return self._seed(run_id=run_id, stage_ids=stage_ids, pipeline_id=pipeline_id)
 
-def _write_json_file(path: Path, payload: dict[str, object]) -> None:
-    write_json_object(path, payload)
+    @staticmethod
+    def stage_rows(manifest: dict[str, object]) -> list[dict[str, object]]:
+        rows = manifest.get("stages", [])
+        if not isinstance(rows, list):
+            raise ValueError("run manifest field stages must be an array")
+        typed = [row for row in rows if isinstance(row, dict)]
+        if len(typed) != len(rows):
+            raise ValueError("run manifest stages entries must be objects")
+        return typed
 
+    def all_stages_completed(self, manifest: dict[str, object]) -> bool:
+        rows = self.stage_rows(manifest)
+        return bool(rows) and all(str(row.get("status", "")) == "completed" for row in rows)
 
-def _seed_run_manifest(generated_dir: Path, run_output_dir: Path, run_id: str, stage_ids: list[str], pipeline_id: str) -> dict[str, object]:
-    template_path = generated_dir / RUN_MANIFEST_TEMPLATE
-    if template_path.exists():
-        manifest = _read_json_file(template_path)
-    else:
-        manifest = {
-            "manifest_version": "phase1-run-resume-v1",
-            "pipeline_id": pipeline_id,
-            "run_id": "",
-            "failure_stage_id": None,
-            "stages": [{"stage_id": stage_id, "status": "pending", "attempt": 0} for stage_id in stage_ids],
-        }
+    def resume_stage_id(self, manifest: dict[str, object]) -> str | None:
+        failure_stage = manifest.get("failure_stage_id")
+        if isinstance(failure_stage, str) and failure_stage:
+            return failure_stage
+        for row in self.stage_rows(manifest):
+            stage_id = str(row.get("stage_id", "")).strip()
+            status = str(row.get("status", "pending"))
+            if stage_id and status != "completed":
+                return stage_id
+        return None
 
-    manifest["run_id"] = run_id
-    if "pipeline_id" not in manifest:
-        manifest["pipeline_id"] = pipeline_id
-    if "failure_stage_id" not in manifest:
-        manifest["failure_stage_id"] = None
-    _write_json_file(_manifest_path(run_output_dir), manifest)
-    return manifest
+    def _seed(self, *, run_id: str, stage_ids: list[str], pipeline_id: str) -> dict[str, object]:
+        template_path = self.generated_dir / RUN_MANIFEST_TEMPLATE
+        if template_path.exists():
+            manifest = load_json_object(template_path)
+        else:
+            manifest = {
+                "manifest_version": "phase1-run-resume-v1",
+                "pipeline_id": pipeline_id,
+                "run_id": "",
+                "failure_stage_id": None,
+                "stages": [{"stage_id": stage_id, "status": "pending", "attempt": 0} for stage_id in stage_ids],
+            }
 
-
-def _load_or_seed_manifest(
-    generated_dir: Path,
-    run_output_dir: Path,
-    run_id: str,
-    stage_ids: list[str],
-    pipeline_id: str,
-) -> dict[str, object]:
-    path = _manifest_path(run_output_dir)
-    if path.exists():
-        return _read_json_file(path)
-    return _seed_run_manifest(generated_dir, run_output_dir, run_id, stage_ids, pipeline_id)
-
-
-def _stage_rows(manifest: dict[str, object]) -> list[dict[str, object]]:
-    rows = manifest.get("stages", [])
-    if not isinstance(rows, list):
-        raise ValueError("run manifest field stages must be an array")
-    typed = [row for row in rows if isinstance(row, dict)]
-    if len(typed) != len(rows):
-        raise ValueError("run manifest stages entries must be objects")
-    return typed
-
-
-def _all_stages_completed(manifest: dict[str, object]) -> bool:
-    rows = _stage_rows(manifest)
-    return bool(rows) and all(str(row.get("status", "")) == "completed" for row in rows)
-
-
-def _resume_stage_from_manifest(manifest: dict[str, object]) -> str | None:
-    failure_stage = manifest.get("failure_stage_id")
-    if isinstance(failure_stage, str) and failure_stage:
-        return failure_stage
-    for row in _stage_rows(manifest):
-        stage_id = str(row.get("stage_id", "")).strip()
-        status = str(row.get("status", "pending"))
-        if stage_id and status != "completed":
-            return stage_id
-    return None
+        manifest["run_id"] = run_id
+        if "pipeline_id" not in manifest:
+            manifest["pipeline_id"] = pipeline_id
+        if "failure_stage_id" not in manifest:
+            manifest["failure_stage_id"] = None
+        write_json_object(self.path, manifest)
+        return manifest
 
 
 def run_generated_flow(
@@ -215,17 +204,12 @@ def run_generated_flow(
             return int(flow.run(run_config=effective_run_config, attempt=attempt))
     pipeline_id = str(getattr(flow, "PIPELINE_ID", "pipeline"))
 
-    manifest = _load_or_seed_manifest(
-        generated_dir=generated_dir,
-        run_output_dir=run_output_dir,
-        run_id=effective_run_id,
-        stage_ids=stage_ids,
-        pipeline_id=pipeline_id,
-    )
+    manifest_repo = RunManifestRepository(generated_dir=generated_dir, run_output_dir=run_output_dir)
+    manifest = manifest_repo.load_or_seed(run_id=effective_run_id, stage_ids=stage_ids, pipeline_id=pipeline_id)
     if preexisting_run_dir:
-        if _all_stages_completed(manifest):
+        if manifest_repo.all_stages_completed(manifest):
             raise FileExistsError(f"refusing to rerun completed run directory: {run_output_dir}")
-        resume_stage_id = _resume_stage_from_manifest(manifest)
+        resume_stage_id = manifest_repo.resume_stage_id(manifest)
         if resume_stage_id:
             effective_run_config.setdefault("_resume_stage_id", resume_stage_id)
 
