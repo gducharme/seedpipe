@@ -10,6 +10,7 @@ from tools.watch import (
     WatchConfig,
     _compute_run_id,
     _scan_once,
+    _validate_bundle_result,
     publish_outbox_bundle,
 )
 
@@ -110,6 +111,50 @@ def run(run_config: dict[str, object], attempt: int = 1) -> int:
             self.assertEqual(code, 1)
             rejected = root / "inbox" / "demo" / ".rejected"
             self.assertEqual(len(list(rejected.iterdir())), 1)
+
+    def test_validate_bundle_result_reports_pipeline_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = self._write_bundle(root, "demo", "b-1")
+            (bundle / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "bundle_id": "b-1",
+                        "pipeline_id": "other-pipe",
+                        "created_at_utc": "2026-03-01T00:00:00Z",
+                        "artifacts": [{"path": "payload/items.jsonl", "sha256": "0" * 64}],
+                    }
+                )
+                + "\n"
+            )
+
+            result = _validate_bundle_result(bundle, "demo")
+
+            self.assertFalse(result.ok)
+            self.assertIsNotNone(result.failure)
+            self.assertEqual(result.failure.code, "pipeline_mismatch")
+
+    def test_validate_bundle_result_reports_bundle_id_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = self._write_bundle(root, "demo", "b-1")
+            (bundle / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "bundle_id": "wrong-id",
+                        "pipeline_id": "demo",
+                        "created_at_utc": "2026-03-01T00:00:00Z",
+                        "artifacts": [{"path": "payload/items.jsonl", "sha256": "0" * 64}],
+                    }
+                )
+                + "\n"
+            )
+
+            result = _validate_bundle_result(bundle, "demo")
+
+            self.assertFalse(result.ok)
+            self.assertIsNotNone(result.failure)
+            self.assertEqual(result.failure.code, "bundle_id_mismatch")
 
     def test_run_id_is_deterministic_for_same_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
