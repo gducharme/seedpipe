@@ -107,9 +107,7 @@ class MetricsValidator:
         module_root = Path(__file__).resolve().parents[2]
         candidates = [
             module_root / "docs" / "specs" / "phase1" / "contracts" / "metrics_contract.schema.json",
-            module_root / "docs" / "specs" / "phase1" / "contracts" / "metrics_contract.json",
             Path("docs/specs/phase1/contracts/metrics_contract.schema.json"),
-            Path("docs/specs/phase1/contracts/metrics_contract.json"),
         ]
         for path in candidates:
             if path.exists():

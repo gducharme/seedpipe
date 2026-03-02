@@ -3,7 +3,6 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 from tools.compile import CompilePaths, compile_pipeline
 from tools.scaffold import scaffold_project
@@ -26,7 +25,7 @@ class ScaffoldTests(unittest.TestCase):
             self.assertIn("Practical implementation notes", agents_text)
             self.assertIn("run manifest stage order does not match compiled flow", agents_text)
             self.assertIn("Fast debug checklist", agents_text)
-            self.assertTrue((root / "agents-readme.markdown").exists())
+            self.assertFalse((root / "agents-readme.markdown").exists())
             self.assertTrue((root / "artifacts/inputs/.gitkeep").exists())
             outputs_gitignore = root / "artifacts/outputs/.gitignore"
             self.assertTrue(outputs_gitignore.exists())
@@ -49,19 +48,6 @@ class ScaffoldTests(unittest.TestCase):
             )
             self.assertEqual(result["pipeline_id"], "example-pipeline")
             self.assertTrue((root / "generated/flow.py").exists())
-
-    def test_scaffold_agents_readme_uses_runtime_repo_root(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            fake_repo = Path(tmp) / "fake-seedpipe"
-            fake_repo.mkdir(parents=True, exist_ok=True)
-            expected = "# Synthetic README\n\nCopied at runtime.\n"
-            (fake_repo / "README.md").write_text(expected)
-
-            root = Path(tmp) / "project"
-            with patch("tools.scaffold.REPO_ROOT", fake_repo):
-                scaffold_project(root)
-
-            self.assertEqual((root / "agents-readme.markdown").read_text(), expected)
 
     def test_scaffold_refuses_overwrite_without_force(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

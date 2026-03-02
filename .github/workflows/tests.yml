@@ -25,5 +25,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
+      - name: Verify generated output is not committed
+        run: |
+          banned="$(git ls-files 'generated/**')"
+          if [ -n "$banned" ]; then
+            echo "Committed generated artifacts are not allowed:"
+            echo "$banned"
+            exit 1
+          fi
+
       - name: Run tests
         run: pytest -q

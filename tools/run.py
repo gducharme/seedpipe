@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import importlib
-import json
 import os
 import shutil
 import sys
@@ -13,6 +12,8 @@ import types
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
+
+from seedpipe.tools.io import load_json_object, write_json_object
 
 DEFAULT_GENERATED_DIR = Path("generated")
 DEFAULT_INPUTS_DIR = Path("artifacts") / "inputs"
@@ -102,14 +103,11 @@ def _manifest_path(run_output_dir: Path) -> Path:
 
 
 def _read_json_file(path: Path) -> dict[str, object]:
-    payload = json.loads(path.read_text())
-    if not isinstance(payload, dict):
-        raise ValueError(f"manifest must be a JSON object: {path}")
-    return payload
+    return load_json_object(path)
 
 
 def _write_json_file(path: Path, payload: dict[str, object]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    write_json_object(path, payload)
 
 
 def _seed_run_manifest(generated_dir: Path, run_output_dir: Path, run_id: str, stage_ids: list[str], pipeline_id: str) -> dict[str, object]:

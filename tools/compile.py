@@ -17,7 +17,6 @@ from typing import Any, Literal
 COMPILER_VERSION = "phase1-mvp"
 DEFAULT_PIPELINE_PATH = Path("docs/specs/phase1/pipeline.yaml")
 DEFAULT_CONTRACTS_DIR = Path("docs/specs/phase1/contracts")
-ALT_CONTRACTS_DIR = Path("docs/specs/phase1/contracts")
 DEFAULT_OUTPUT_DIR = Path("generated")
 
 
@@ -1329,9 +1328,7 @@ def compile_pipeline(paths: CompilePaths, *, emit_debug_ir: bool = True) -> dict
 def pick_contracts_dir(cli_dir: Path | None) -> Path:
     if cli_dir is not None:
         return cli_dir
-    if DEFAULT_CONTRACTS_DIR.exists():
-        return DEFAULT_CONTRACTS_DIR
-    return ALT_CONTRACTS_DIR
+    return DEFAULT_CONTRACTS_DIR
 
 
 def parse_args() -> argparse.Namespace:
