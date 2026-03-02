@@ -12,6 +12,97 @@ from .metrics import MetricRecord, MetricName, MetricUnit, MetricsEmitter
 
 
 @dataclass(frozen=True)
+class ArtifactResolver:
+    run_dir: Path
+    run_config: dict[str, Any]
+    expected_outputs: list[dict[str, Any]]
+
+    def resolve(self, name: str) -> Path:
+        path = Path(name)
+        if path.is_absolute():
+            return path
+        # Current stage output checks should resolve the live in-run artifact path.
+        if name in self._current_output_names():
+            return self.run_dir / path
+        concrete = self._artifact_index().get(name)
+        if isinstance(concrete, str) and concrete.strip():
+            concrete_path = Path(concrete)
+            if concrete_path.is_absolute():
+                return concrete_path
+            return self.run_dir / concrete_path
+        if path.parts[:2] == ("artifacts", "inputs"):
+            return self.run_dir / path
+        return self.run_dir / path
+
+    def _artifact_index(self) -> dict[str, str]:
+        raw = self.run_config.get("_artifact_index", {})
+        if not isinstance(raw, dict):
+            return {}
+        out: dict[str, str] = {}
+        for key, value in raw.items():
+            if isinstance(key, str) and isinstance(value, str):
+                out[key] = value
+        return out
+
+    def _current_output_names(self) -> set[str]:
+        names: set[str] = set()
+        for output in self.expected_outputs:
+            path = output.get("path")
+            if isinstance(path, str) and path:
+                names.add(path)
+        return names
+
+
+@dataclass(frozen=True)
+class StageSchemaValidator:
+    project_root: Path
+    validator: TinySchemaValidator
+
+    @classmethod
+    def from_context(cls, run_dir: Path, run_config: dict[str, Any]) -> "StageSchemaValidator":
+        configured = run_config.get("_pipe_root")
+        if isinstance(configured, str) and configured.strip():
+            project_root = Path(configured)
+        else:
+            project_root = run_dir.parent.parent
+        return cls(project_root=project_root, validator=TinySchemaValidator({}))
+
+    def validate_output_schema(self, stage_id: str, artifact_path: Path, schema_name: str) -> None:
+        schema = self._load_stage_schema(stage_id, schema_name)
+        if artifact_path.suffix == ".jsonl":
+            for line_no, line in enumerate(artifact_path.read_text().splitlines(), start=1):
+                if not line.strip():
+                    continue
+                value = json.loads(line)
+                issues = self.validator.validate(value, schema)
+                if issues:
+                    issue = issues[0]
+                    raise ValueError(
+                        f"schema validation failed for stage {stage_id} output {artifact_path} line {line_no}"
+                        f" at {issue.pointer}: {issue.message}"
+                    )
+            return
+
+        value = json.loads(artifact_path.read_text())
+        issues = self.validator.validate(value, schema)
+        if issues:
+            issue = issues[0]
+            raise ValueError(
+                f"schema validation failed for stage {stage_id} output {artifact_path}"
+                f" at {issue.pointer}: {issue.message}"
+            )
+
+    def _load_stage_schema(self, stage_id: str, schema_name: str) -> dict[str, Any]:
+        schema_path = self.project_root / "spec" / "stages" / stage_id / schema_name
+        if not schema_path.exists():
+            raise FileNotFoundError(f"schema not found for stage {stage_id}: {schema_path}")
+        payload = json.loads(schema_path.read_text())
+        if not isinstance(payload, dict):
+            raise ValueError(f"schema is not a JSON object: {schema_path}")
+        return payload
+
+
+@dataclass(frozen=True)
 class StageContext:
     run_config: dict[str, Any]
     run_id: str
@@ -28,68 +119,6 @@ class StageContext:
             object.__setattr__(self, 'start_time', time.time())
         if self.metrics_emitter is None:
             object.__setattr__(self, 'metrics_emitter', MetricsEmitter(self.run_id, self.stage_id or "root"))
-
-    def _artifact_index(self) -> dict[str, str]:
-        raw = self.run_config.get("_artifact_index", {})
-        if not isinstance(raw, dict):
-            return {}
-        out: dict[str, str] = {}
-        for key, value in raw.items():
-            if isinstance(key, str) and isinstance(value, str):
-                out[key] = value
-        return out
-
-    def _current_output_names(self) -> set[str]:
-        # Track the outputs currently being written so we resolve live paths during validation.
-        names: set[str] = set()
-        for output in self.expected_outputs or []:
-            path = output.get("path")
-            if isinstance(path, str) and path:
-                names.add(path)
-        return names
-
-    def _project_root(self) -> Path:
-        configured = self.run_config.get("_pipe_root")
-        if isinstance(configured, str) and configured.strip():
-            return Path(configured)
-        return self.run_dir.parent.parent
-
-    def _load_stage_schema(self, stage_id: str, schema_name: str) -> dict[str, Any]:
-        schema_path = self._project_root() / "spec" / "stages" / stage_id / schema_name
-        if not schema_path.exists():
-            raise FileNotFoundError(
-                f"schema not found for stage {stage_id}: {schema_path}"
-            )
-        payload = json.loads(schema_path.read_text())
-        if not isinstance(payload, dict):
-            raise ValueError(f"schema is not a JSON object: {schema_path}")
-        return payload
-
-    def _validate_output_schema(self, stage_id: str, artifact_path: Path, schema_name: str) -> None:
-        schema = self._load_stage_schema(stage_id, schema_name)
-        validator = TinySchemaValidator({})
-        if artifact_path.suffix == ".jsonl":
-            for line_no, line in enumerate(artifact_path.read_text().splitlines(), start=1):
-                if not line.strip():
-                    continue
-                value = json.loads(line)
-                issues = validator.validate(value, schema)
-                if issues:
-                    issue = issues[0]
-                    raise ValueError(
-                        f"schema validation failed for stage {stage_id} output {artifact_path} line {line_no}"
-                        f" at {issue.pointer}: {issue.message}"
-                    )
-            return
-
-        value = json.loads(artifact_path.read_text())
-        issues = validator.validate(value, schema)
-        if issues:
-            issue = issues[0]
-            raise ValueError(
-                f"schema validation failed for stage {stage_id} output {artifact_path}"
-                f" at {issue.pointer}: {issue.message}"
-            )
 
     @classmethod
     def make_base(cls, run_config: dict[str, Any], run_dir: Path | None = None) -> "StageContext":
@@ -131,6 +160,7 @@ class StageContext:
         outputs = self.expected_outputs or []
         explicit = [str(item.get("path", "")) for item in outputs if item.get("path")]
         self.validate_outputs(stage_id, explicit)
+        schema_validator = StageSchemaValidator.from_context(run_dir=self.run_dir, run_config=self.run_config)
         for output in outputs:
             schema_name = output.get("schema")
             path = output.get("path")
@@ -138,22 +168,12 @@ class StageContext:
                 continue
             if not isinstance(path, str) or not path:
                 continue
-            self._validate_output_schema(stage_id, self.resolve_artifact(path), schema_name)
+            schema_validator.validate_output_schema(stage_id, self.resolve_artifact(path), schema_name)
 
     def resolve_artifact(self, name: str) -> Path:
-        path = Path(name)
-        if path.is_absolute():
-            return path
-        # Current stage output checks should resolve the live in-run artifact path.
-        if name in self._current_output_names():
-            return self.run_dir / path
-        index = self._artifact_index()
-        concrete = index.get(name)
-        if isinstance(concrete, str) and concrete.strip():
-            concrete_path = Path(concrete)
-            if concrete_path.is_absolute():
-                return concrete_path
-            return self.run_dir / concrete_path
-        if path.parts[:2] == ("artifacts", "inputs"):
-            return self.run_dir / path
-        return self.run_dir / path
+        resolver = ArtifactResolver(
+            run_dir=self.run_dir,
+            run_config=self.run_config,
+            expected_outputs=list(self.expected_outputs or []),
+        )
+        return resolver.resolve(name)

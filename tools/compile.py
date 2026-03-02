@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 import dataclasses
 import datetime as dt
 import hashlib
@@ -305,86 +306,104 @@ def normalize_pipeline(raw: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
+@dataclasses.dataclass
+class _PipelineValidationContext:
+    pipeline: dict[str, Any]
+    pipeline_id: str
+    pipeline_type: str
+    max_loops: int
+    stages: list[dict[str, Any]]
+    seen_stage_ids: set[str] = dataclasses.field(default_factory=set)
+    produced_so_far: set[str] = dataclasses.field(default_factory=set)
+    reentry_stage_by_name: dict[str, int] = dataclasses.field(default_factory=dict)
+    pending_go_tos: list[tuple[int, str]] = dataclasses.field(default_factory=list)
+
+
+def _validate_pipeline_top_level(pipeline: dict[str, Any]) -> _PipelineValidationContext:
     pipeline_id = pipeline.get("pipeline_id")
     if not isinstance(pipeline_id, str) or not pipeline_id.strip():
         raise CompileError("pipeline.pipeline_id must be a non-empty string")
-    pid = pipeline_id
-
     if pipeline.get("determinism_policy") not in {"strict", "best_effort"}:
-        raise CompileError(f"pipeline '{pid}' determinism_policy must be 'strict' or 'best_effort'")
+        raise CompileError(f"pipeline '{pipeline_id}' determinism_policy must be 'strict' or 'best_effort'")
     pipeline_type = pipeline.get("pipeline_type")
     if pipeline_type not in {"straight", "looping"}:
-        raise CompileError(f"pipeline '{pid}' pipeline_type must be 'straight' or 'looping'")
+        raise CompileError(f"pipeline '{pipeline_id}' pipeline_type must be 'straight' or 'looping'")
     max_loops = pipeline.get("max_loops", 0)
     if not isinstance(max_loops, int) or max_loops < 0:
-        raise CompileError(f"pipeline '{pid}' max_loops must be an integer >= 0")
+        raise CompileError(f"pipeline '{pipeline_id}' max_loops must be an integer >= 0")
 
     stages = pipeline.get("stages", [])
     if not stages:
         raise CompileError("pipeline.stages must include at least one stage")
+    if not isinstance(stages, list):
+        raise CompileError("pipeline.stages must include at least one stage")
 
-    seen_stage_ids: set[str] = set()
-    produced_so_far: set[str] = set()
-    reentry_stage_by_name: dict[str, int] = {}
-    pending_go_tos: list[tuple[int, str]] = []
-    for idx, stage in enumerate(stages):
+    return _PipelineValidationContext(
+        pipeline=pipeline,
+        pipeline_id=pipeline_id,
+        pipeline_type=pipeline_type,
+        max_loops=max_loops,
+        stages=stages,
+    )
+
+
+def _validate_human_required_instructions(mode: Any, instructions: Any, stage_index: int) -> None:
+    if mode == "human_required":
+        if not isinstance(instructions, dict):
+            raise CompileError(f"pipeline.stages[{stage_index}].instructions must be an object when mode='human_required'")
+        summary = instructions.get("summary")
+        steps = instructions.get("steps")
+        done_when = instructions.get("done_when")
+        if not isinstance(summary, str) or not summary.strip():
+            raise CompileError(
+                f"pipeline.stages[{stage_index}].instructions.summary must be a non-empty string when mode='human_required'"
+            )
+        if not isinstance(steps, list) or not steps or any(not isinstance(step, str) or not step.strip() for step in steps):
+            raise CompileError(
+                f"pipeline.stages[{stage_index}].instructions.steps must be a non-empty array of strings when mode='human_required'"
+            )
+        if not isinstance(done_when, list) or not done_when or any(
+            not isinstance(item, str) or not item.strip() for item in done_when
+        ):
+            raise CompileError(
+                f"pipeline.stages[{stage_index}].instructions.done_when must be a non-empty array of strings when mode='human_required'"
+            )
+        troubleshooting = instructions.get("troubleshooting")
+        if troubleshooting is not None and (
+            not isinstance(troubleshooting, list) or any(not isinstance(item, str) or not item.strip() for item in troubleshooting)
+        ):
+            raise CompileError(
+                f"pipeline.stages[{stage_index}].instructions.troubleshooting must be an array of strings when provided"
+            )
+        validation_command = instructions.get("validation_command")
+        if validation_command is not None and (not isinstance(validation_command, str) or not validation_command.strip()):
+            raise CompileError(
+                f"pipeline.stages[{stage_index}].instructions.validation_command must be a non-empty string when provided"
+            )
+        return
+    if instructions is not None:
+        raise CompileError(f"pipeline.stages[{stage_index}].instructions is only allowed when mode='human_required'")
+
+
+def _validate_stage_rows(ctx: _PipelineValidationContext) -> None:
+    for idx, stage in enumerate(ctx.stages):
         sid = stage.get("id")
         if not isinstance(sid, str) or not sid.strip():
             raise CompileError(f"pipeline.stages[{idx}].id must be a non-empty string")
-        if sid in seen_stage_ids:
+        if sid in ctx.seen_stage_ids:
             raise CompileError(f"duplicate stage id: {sid}")
-        seen_stage_ids.add(sid)
+        ctx.seen_stage_ids.add(sid)
 
         mode = stage.get("mode")
         if mode not in {"whole_run", "per_item", "human_required"}:
             raise CompileError(f"pipeline.stages[{idx}].mode must be 'whole_run', 'per_item', or 'human_required'")
 
-        instructions = stage.get("instructions")
-        if mode == "human_required":
-            if not isinstance(instructions, dict):
-                raise CompileError(f"pipeline.stages[{idx}].instructions must be an object when mode='human_required'")
-            summary = instructions.get("summary")
-            steps = instructions.get("steps")
-            done_when = instructions.get("done_when")
-            if not isinstance(summary, str) or not summary.strip():
-                raise CompileError(
-                    f"pipeline.stages[{idx}].instructions.summary must be a non-empty string when mode='human_required'"
-                )
-            if not isinstance(steps, list) or not steps or any(not isinstance(step, str) or not step.strip() for step in steps):
-                raise CompileError(
-                    f"pipeline.stages[{idx}].instructions.steps must be a non-empty array of strings when mode='human_required'"
-                )
-            if not isinstance(done_when, list) or not done_when or any(
-                not isinstance(item, str) or not item.strip() for item in done_when
-            ):
-                raise CompileError(
-                    f"pipeline.stages[{idx}].instructions.done_when must be a non-empty array of strings when mode='human_required'"
-                )
-            troubleshooting = instructions.get("troubleshooting")
-            if troubleshooting is not None and (
-                not isinstance(troubleshooting, list)
-                or any(not isinstance(item, str) or not item.strip() for item in troubleshooting)
-            ):
-                raise CompileError(
-                    f"pipeline.stages[{idx}].instructions.troubleshooting must be an array of strings when provided"
-                )
-            validation_command = instructions.get("validation_command")
-            if validation_command is not None and (
-                not isinstance(validation_command, str) or not validation_command.strip()
-            ):
-                raise CompileError(
-                    f"pipeline.stages[{idx}].instructions.validation_command must be a non-empty string when provided"
-                )
-        elif instructions is not None:
-            raise CompileError(
-                f"pipeline.stages[{idx}].instructions is only allowed when mode='human_required'"
-            )
+        _validate_human_required_instructions(mode=mode, instructions=stage.get("instructions"), stage_index=idx)
 
         placeholder = stage.get("placeholder")
         if not isinstance(placeholder, bool):
             raise CompileError(f"pipeline.stages[{idx}].placeholder must be a boolean")
-        
+
         reentry = stage.get("reentry")
         if reentry is not None and (not isinstance(reentry, str) or not reentry.strip()):
             raise CompileError(f"pipeline.stages[{idx}].reentry must be a non-empty string when provided")
@@ -402,7 +421,7 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
             if not isinstance(name, str) or not name.strip():
                 raise CompileError(f"pipeline.stages[{idx}] contains non-string artifact in inputs/outputs")
 
-        unresolved = [artifact for artifact in stage_inputs if artifact not in produced_so_far]
+        unresolved = [artifact for artifact in stage_inputs if artifact not in ctx.produced_so_far]
         if unresolved and not placeholder:
             unresolved_joined = ", ".join(unresolved)
             raise CompileError(
@@ -411,46 +430,54 @@ def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
             )
 
         if isinstance(reentry, str):
-            if reentry in reentry_stage_by_name:
-                prior_idx = reentry_stage_by_name[reentry]
-                prior_stage_id = stages[prior_idx].get("id", "<unknown>")
+            if reentry in ctx.reentry_stage_by_name:
+                prior_idx = ctx.reentry_stage_by_name[reentry]
+                prior_stage_id = ctx.stages[prior_idx].get("id", "<unknown>")
                 raise CompileError(
-                    f"pipeline '{pid}' stage[{idx}] (id='{sid}') reentry '{reentry}' duplicates stage[{prior_idx}] (id='{prior_stage_id}')"
+                    f"pipeline '{ctx.pipeline_id}' stage[{idx}] (id='{sid}') reentry '{reentry}' duplicates stage[{prior_idx}] (id='{prior_stage_id}')"
                 )
-            reentry_stage_by_name[reentry] = idx
+            ctx.reentry_stage_by_name[reentry] = idx
         if isinstance(go_to, str):
-            pending_go_tos.append((idx, go_to))
+            ctx.pending_go_tos.append((idx, go_to))
 
-        produced_so_far.update(stage_outputs)
+        ctx.produced_so_far.update(stage_outputs)
 
-    pipeline_type = pipeline["pipeline_type"]
-    if pipeline_type == "straight":
-        if reentry_stage_by_name or pending_go_tos:
+
+def _validate_loop_semantics(ctx: _PipelineValidationContext) -> None:
+    if ctx.pipeline_type == "straight":
+        if ctx.reentry_stage_by_name or ctx.pending_go_tos:
             raise CompileError(
-                f"pipeline '{pid}' with type 'straight' does not allow 'reentry' or 'go_to' stage fields"
+                f"pipeline '{ctx.pipeline_id}' with type 'straight' does not allow 'reentry' or 'go_to' stage fields"
             )
-        if max_loops != 0:
-            raise CompileError(f"pipeline '{pid}' with type 'straight' requires max_loops=0")
+        if ctx.max_loops != 0:
+            raise CompileError(f"pipeline '{ctx.pipeline_id}' with type 'straight' requires max_loops=0")
         return
 
-    if max_loops < 1:
-        raise CompileError(f"pipeline '{pid}' with type 'looping' requires max_loops >= 1")
-    if not reentry_stage_by_name:
+    if ctx.max_loops < 1:
+        raise CompileError(f"pipeline '{ctx.pipeline_id}' with type 'looping' requires max_loops >= 1")
+    if not ctx.reentry_stage_by_name:
         raise CompileError("pipeline_type 'looping' requires at least one stage with 'reentry'")
 
-    for idx, target in pending_go_tos:
-        stage_id = stages[idx].get("id", "<unknown>")
-        target_stage_idx = reentry_stage_by_name.get(target)
+    for idx, target in ctx.pending_go_tos:
+        stage_id = ctx.stages[idx].get("id", "<unknown>")
+        target_stage_idx = ctx.reentry_stage_by_name.get(target)
         if target_stage_idx is None:
             raise CompileError(
-                f"pipeline '{pid}' stage[{idx}] (id='{stage_id}') go_to='{target}' references unknown reentry"
+                f"pipeline '{ctx.pipeline_id}' stage[{idx}] (id='{stage_id}') go_to='{target}' references unknown reentry"
             )
-        target_stage_id = stages[target_stage_idx].get("id", "<unknown>")
+        target_stage_id = ctx.stages[target_stage_idx].get("id", "<unknown>")
         if target_stage_idx >= idx:
             raise CompileError(
-                f"pipeline '{pid}' stage[{idx}] (id='{stage_id}') go_to='{target}' points to stage[{target_stage_idx}] "
+                f"pipeline '{ctx.pipeline_id}' stage[{idx}] (id='{stage_id}') go_to='{target}' points to stage[{target_stage_idx}] "
                 f"(id='{target_stage_id}') which is not earlier"
             )
+
+
+def validate_pipeline_structure(pipeline: dict[str, Any]) -> None:
+    ctx = _validate_pipeline_top_level(pipeline)
+    validators = [_validate_stage_rows, _validate_loop_semantics]
+    for validator in validators:
+        validator(ctx)
 
 
 def build_ir(pipeline: dict[str, Any]) -> PipelineIR:
@@ -539,17 +566,44 @@ def _validate_metrics_contract_schema(schema: dict[str, Any]) -> None:
         raise CompileError(f"metrics_contract.schema.json missing required metric names: {missing}")
 
 
+@dataclasses.dataclass(frozen=True)
+class ArtifactSchemaSpec:
+    schema_name: str
+    predicate: Callable[[str], bool]
+
+    def matches(self, artifact_name: str) -> bool:
+        return bool(self.predicate(artifact_name))
+
+
+def _artifact_schema_specs() -> tuple[ArtifactSchemaSpec, ...]:
+    return (
+        ArtifactSchemaSpec(
+            schema_name="items_row.schema.json",
+            predicate=lambda artifact: artifact.endswith("items.jsonl") or artifact == "items.jsonl",
+        ),
+        ArtifactSchemaSpec(
+            schema_name="item_state_row.schema.json",
+            predicate=lambda artifact: artifact.endswith("item_state.jsonl") or artifact == "item_state.jsonl",
+        ),
+        ArtifactSchemaSpec(
+            schema_name="manifest.schema.json",
+            predicate=lambda artifact: artifact.endswith("manifest.json") or artifact == "manifest.json",
+        ),
+        ArtifactSchemaSpec(
+            schema_name="artifact_ref.schema.json",
+            predicate=lambda artifact: True,
+        ),
+    )
+
+
 def resolve_artifact_schemas(ir: PipelineIR, contracts: dict[str, dict[str, Any]]) -> dict[str, str]:
     mapping: dict[str, str] = {}
+    specs = _artifact_schema_specs()
     for artifact in sorted(ir.artifact_producers):
-        if artifact.endswith("items.jsonl") or artifact == "items.jsonl":
-            mapping[artifact] = "items_row.schema.json"
-        elif artifact.endswith("item_state.jsonl") or artifact == "item_state.jsonl":
-            mapping[artifact] = "item_state_row.schema.json"
-        elif artifact.endswith("manifest.json") or artifact == "manifest.json":
-            mapping[artifact] = "manifest.schema.json"
-        else:
-            mapping[artifact] = "artifact_ref.schema.json"
+        for spec in specs:
+            if spec.matches(artifact):
+                mapping[artifact] = spec.schema_name
+                break
 
     missing = sorted({schema for schema in mapping.values() if schema not in contracts})
     if missing:
@@ -771,6 +825,66 @@ def _append_stage_exception_lines(call_lines: list[str], stage: StageIR) -> None
         f"                _mark_stage(manifest, stage_id={stage.stage_id!r}, status='failed', attempt=attempt, error={{'message': str(exc)}})"
     )
     call_lines.append("                raise")
+
+
+def _emit_human_required_stage_lines(
+    call_lines: list[str],
+    stage: StageIR,
+    stage_mod_name: str,
+    invocations: list[tuple[dict[str, str], list[dict[str, Any]]]],
+) -> None:
+    _ = stage_mod_name, invocations
+    _append_human_required_stage_lines(call_lines, stage)
+
+
+def _emit_whole_run_stage_lines(
+    call_lines: list[str],
+    stage: StageIR,
+    stage_mod_name: str,
+    invocations: list[tuple[dict[str, str], list[dict[str, Any]]]],
+) -> None:
+    call_lines.append(f"            _mark_stage(manifest, stage_id={stage.stage_id!r}, status='running', attempt=attempt)")
+    call_lines.append("            try:")
+    for invocation_keys, invocation_expected in invocations:
+        _append_whole_run_stage_invocation_lines(
+            call_lines,
+            stage,
+            stage_mod_name,
+            invocation_keys,
+            invocation_expected,
+        )
+    _append_stage_completion_lines(call_lines, stage)
+    _append_stage_exception_lines(call_lines, stage)
+
+
+def _emit_per_item_stage_lines(
+    call_lines: list[str],
+    stage: StageIR,
+    stage_mod_name: str,
+    invocations: list[tuple[dict[str, str], list[dict[str, Any]]]],
+) -> None:
+    call_lines.append(f"            _mark_stage(manifest, stage_id={stage.stage_id!r}, status='running', attempt=attempt)")
+    call_lines.append("            try:")
+    call_lines.append("                stage_failed_item_ids: list[str] = []")
+    for invocation_keys, invocation_expected in invocations:
+        _append_per_item_stage_invocation_lines(
+            call_lines,
+            stage,
+            stage_mod_name,
+            invocation_keys,
+            invocation_expected,
+        )
+    _append_per_item_failure_routing_lines(call_lines, stage)
+    _append_stage_completion_lines(call_lines, stage)
+    _append_stage_exception_lines(call_lines, stage)
+
+
+def _stage_mode_emitters() -> dict[str, Any]:
+    return {
+        "human_required": _emit_human_required_stage_lines,
+        "whole_run": _emit_whole_run_stage_lines,
+        "per_item": _emit_per_item_stage_lines,
+    }
 
 
 def emit_stage_wrapper(stage: StageIR, meta: dict[str, str]) -> str:
@@ -1278,6 +1392,7 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
     reentry_to_stage = {stage.reentry: stage.stage_id for stage in ir.stages if isinstance(stage.reentry, str)}
     stage_go_to = {stage.stage_id: stage.go_to for stage in ir.stages if isinstance(stage.go_to, str)}
     imports = "\n".join(f"from seedpipe.generated.stages import {sid} as stage_{_stage_module_name(sid)}" for sid in stage_ids)
+    stage_emitters = _stage_mode_emitters()
 
     call_lines: list[str] = []
     for stage_index, stage in enumerate(ir.stages):
@@ -1287,28 +1402,7 @@ def emit_flow_py(ir: PipelineIR, meta: dict[str, str]) -> str:
         call_lines.append(
             f"        if (not loop_continue) and ({stage_index} >= cycle_start_index) and (PIPELINE_TYPE == 'looping' or _should_run_stage(manifest=manifest, stage_id={stage.stage_id!r}, stage_index={stage_index}, resume_index=resume_index)):"
         )
-        if stage.mode == "human_required":
-            _append_human_required_stage_lines(call_lines, stage)
-            continue
-        call_lines.append(f"            _mark_stage(manifest, stage_id={stage.stage_id!r}, status='running', attempt=attempt)")
-        call_lines.append("            try:")
-        if stage.mode == "per_item":
-            call_lines.append("                stage_failed_item_ids: list[str] = []")
-        for invocation_keys, invocation_expected in invocations:
-            if stage.mode == "whole_run":
-                _append_whole_run_stage_invocation_lines(
-                    call_lines, stage, stage_mod_name, invocation_keys, invocation_expected
-                )
-                continue
-
-            _append_per_item_stage_invocation_lines(
-                call_lines, stage, stage_mod_name, invocation_keys, invocation_expected
-            )
-
-        if stage.mode == "per_item":
-            _append_per_item_failure_routing_lines(call_lines, stage)
-        _append_stage_completion_lines(call_lines, stage)
-        _append_stage_exception_lines(call_lines, stage)
+        stage_emitters[stage.mode](call_lines, stage, stage_mod_name, invocations)
 
     b = CodeBuilder()
     b.add(generated_banner(meta))
