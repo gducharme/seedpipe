@@ -458,6 +458,7 @@ def run_whole(ctx: StageContext) -> None:
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -585,6 +586,7 @@ def run_whole(ctx) -> None:
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -689,6 +691,7 @@ def run_whole(ctx) -> None:
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))
@@ -778,6 +781,7 @@ def run_whole(ctx) -> None:
                 "item_state_row.schema.json": {"type": "object"},
                 "items_row.schema.json": {"type": "object"},
                 "manifest.schema.json": {"type": "object"},
+                "metrics_contract.schema.json": {"type": "object"},
             }
             for name, payload in contracts.items():
                 (contracts_dir / name).write_text(json.dumps(payload))

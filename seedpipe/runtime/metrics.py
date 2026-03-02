@@ -96,11 +96,25 @@ class FunctionMetricStatus:
 
 class MetricsValidator:
     def __init__(self):
-        schema_path = Path("docs/specs/phase1/contracts/metrics_contract.json")
+        schema_path = self._resolve_schema_path()
         if not schema_path.exists():
-            raise FileNotFoundError(f"metrics contract schema not found: {schema_path}")
+            raise FileNotFoundError(f"metrics contract schema not found in expected locations")
         with schema_path.open() as f:
             self.schema = json.load(f)
+
+    @staticmethod
+    def _resolve_schema_path() -> Path:
+        module_root = Path(__file__).resolve().parents[2]
+        candidates = [
+            module_root / "docs" / "specs" / "phase1" / "contracts" / "metrics_contract.json",
+            module_root / "spec" / "phase1" / "contracts" / "metrics_contract.schema.json",
+            Path("docs/specs/phase1/contracts/metrics_contract.json"),
+            Path("spec/phase1/contracts/metrics_contract.schema.json"),
+        ]
+        for path in candidates:
+            if path.exists():
+                return path
+        return candidates[0]
 
     def validate(self, record: dict[str, Any]) -> list[str]:
         return self._validate_against_schema(record, self.schema, [])
