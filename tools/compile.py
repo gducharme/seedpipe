@@ -483,6 +483,7 @@ def load_contracts(paths: CompilePaths) -> dict[str, dict[str, Any]]:
         "manifest.schema.json",
         "artifact_ref.schema.json",
         "item_state_row.schema.json",
+        "items_row.schema.json",
         "metrics_contract.schema.json",
     }
     missing = required - set(contracts)
