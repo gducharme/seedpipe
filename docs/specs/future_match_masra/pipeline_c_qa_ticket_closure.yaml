@@ -1,0 +1,83 @@
+pipeline_id: masra-gap-qa-ticket-closure
+item_unit: ticket
+determinism_policy: strict
+pipeline_type: looping
+max_loops: 3
+stages:
+  - id: ingest_coding_results
+    mode: whole_run
+    inputs: []
+    outputs:
+      - implementation/results/item_results.jsonl
+      - implementation/results/change_log.jsonl
+      - implementation/publish/approved/items.jsonl
+      - implementation/publish/rejected/items.jsonl
+
+  - id: qa_ticket
+    mode: per_item
+    inputs:
+      - implementation/results/item_results.jsonl
+      - implementation/results/change_log.jsonl
+      - implementation/publish/approved/items.jsonl
+    outputs:
+      - qa/results/qa_rows.jsonl
+      - qa/results/defects.jsonl
+    reentry: retry_qa
+
+  - id: remediate_defects
+    mode: per_item
+    inputs:
+      - qa/results/defects.jsonl
+      - implementation/results/change_log.jsonl
+    outputs:
+      - qa/remediation/fixes.jsonl
+      - qa/remediation/fix_change_log.jsonl
+    go_to: retry_qa
+
+  - id: qa_finalize
+    mode: whole_run
+    inputs:
+      - qa/results/qa_rows.jsonl
+      - qa/results/defects.jsonl
+      - implementation/publish/approved/items.jsonl
+      - implementation/publish/rejected/items.jsonl
+    outputs:
+      - qa/reports/qa_summary.json
+      - qa/reports/ticket_resolution.jsonl
+      - validation.json
+
+  - id: close_tickets_review
+    mode: human_required
+    inputs:
+      - qa/reports/qa_summary.json
+      - qa/reports/ticket_resolution.jsonl
+      - validation.json
+    outputs:
+      - review/closed_tickets.jsonl
+      - review/reopened_tickets.jsonl
+      - review/closure_notes.md
+    instructions:
+      summary: Review QA evidence and close only tickets that are fully validated.
+      steps:
+        - Verify qa/reports/qa_summary.json has no unresolved blockers.
+        - Verify each row in qa/reports/ticket_resolution.jsonl includes objective evidence.
+        - Write review/closed_tickets.jsonl for accepted tickets and review/reopened_tickets.jsonl for items needing rework.
+        - Document reasoning in review/closure_notes.md.
+      done_when:
+        - review/closed_tickets.jsonl exists.
+        - review/reopened_tickets.jsonl exists.
+        - review/closure_notes.md exists.
+      validation_command: python -m tools.verify --run-dir .
+
+  - id: publish_qa_closure_bundle
+    mode: whole_run
+    inputs:
+      - review/closed_tickets.jsonl
+      - review/reopened_tickets.jsonl
+      - review/closure_notes.md
+      - qa/reports/qa_summary.json
+    outputs:
+      - manifest.json
+      - qa/publish/closure_manifest.json
+      - qa/publish/closed/items.jsonl
+      - qa/publish/reopened/items.jsonl
