@@ -593,3 +593,11 @@ result = compile_pipeline(
 
 print(result["pipeline_id"], result["output_dir"])
 ```
+
+## Workflow: Inspect → Compile → Implement → Validate
+
+- Inspect: Review `docs/specs/phase1/pipeline.yaml` and contracts under `docs/specs/phase1/contracts/` for shape and invariants.
+- Compile: Run `seedpipe-compile` (or `python -m tools.compile`) to emit `generated/` code and metadata.
+- Implement: Edit stage code under `src/stages/*.py`; never hand-edit `generated/`.
+- Validate: Run `seedpipe-run` to execute the compiled flow; runtime enforces declared inputs/outputs and schema contracts. For watcher mode, use `seedpipe-watch`.
+- Iterate: After any pipeline/spec change, re-run compile; after implementation changes, re-run run/tests.
