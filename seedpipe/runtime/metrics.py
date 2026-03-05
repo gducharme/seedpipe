@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from seedpipe.tools.contracts import RecursiveSchemaValidator
+
 
 MetricName = Literal["latency", "cost", "success_count", "failure_count", "quality_rating"]
 MetricUnit = Literal["ms", "USD", "count", "1-5"]
@@ -206,6 +208,7 @@ class MetricsValidator:
             raise FileNotFoundError(f"metrics contract schema not found in expected locations")
         with schema_path.open() as f:
             self.schema = json.load(f)
+        self._validator = RecursiveSchemaValidator()
 
     @staticmethod
     def _resolve_schema_path() -> Path:
@@ -220,47 +223,7 @@ class MetricsValidator:
         return candidates[0]
 
     def validate(self, record: dict[str, Any]) -> list[str]:
-        return self._validate_against_schema(record, self.schema, [])
-
-    def _validate_against_schema(self, data: Any, schema: dict[str, Any], path: list[str]) -> list[str]:
-        issues = []
-        if "type" in schema:
-            expected_type = schema["type"]
-            if expected_type == "string" and not isinstance(data, str):
-                path_str = ".".join(path) if path else "root"
-                issues.append(f"{path_str}: expected string, got {type(data).__name__}")
-            elif expected_type == "number" and not isinstance(data, (int, float)):
-                path_str = ".".join(path) if path else "root"
-                issues.append(f"{path_str}: expected number, got {type(data).__name__}")
-            elif expected_type == "integer" and not isinstance(data, int):
-                path_str = ".".join(path) if path else "root"
-                issues.append(f"{path_str}: expected integer, got {type(data).__name__}")
-            elif expected_type == "boolean" and not isinstance(data, bool):
-                path_str = ".".join(path) if path else "root"
-                issues.append(f"{path_str}: expected boolean, got {type(data).__name__}")
-            elif expected_type == "array" and not isinstance(data, list):
-                path_str = ".".join(path) if path else "root"
-                issues.append(f"{path_str}: expected array, got {type(data).__name__}")
-            elif expected_type == "object" and not isinstance(data, dict):
-                path_str = ".".join(path) if path else "root"
-                issues.append(f"{path_str}: expected object, got {type(data).__name__}")
-
-        if "enum" in schema and data not in schema["enum"]:
-            path_str = ".".join(path) if path else "root"
-            issues.append(f"{path_str}: value {data!r} not in enum {schema['enum']}")
-
-        if isinstance(data, dict) and "properties" in schema:
-            for prop_name, prop_schema in schema["properties"].items():
-                if prop_name in data:
-                    issues.extend(self._validate_against_schema(data[prop_name], prop_schema, path + [prop_name]))
-
-        if isinstance(data, dict) and "required" in schema:
-            for req_field in schema["required"]:
-                if req_field not in data:
-                    path_str = ".".join(path) if path else "root"
-                    issues.append(f"{path_str}: missing required field '{req_field}'")
-
-        return issues
+        return self._validator.validate(record, self.schema)
 
 
 class MetricsEmitter:

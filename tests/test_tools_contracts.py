@@ -5,7 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from seedpipe.tools.contracts import TinySchemaValidator, load_schema_store, resolve_contract, validate_ticket_status_transition
+from seedpipe.tools.contracts import (
+    RecursiveSchemaValidator,
+    TinySchemaValidator,
+    load_schema_store,
+    resolve_contract,
+    validate_ticket_status_transition,
+)
 
 
 class TinySchemaValidatorTests(unittest.TestCase):
@@ -105,6 +111,37 @@ class TicketStatusTransitionTests(unittest.TestCase):
     def test_no_previous_status_is_valid(self) -> None:
         issues = validate_ticket_status_transition(None, "ready")
         self.assertEqual(len(issues), 0)
+
+
+class RecursiveSchemaValidatorTests(unittest.TestCase):
+    def test_reports_missing_required_and_type_issues(self) -> None:
+        validator = RecursiveSchemaValidator()
+        schema = {
+            "type": "object",
+            "required": ["id", "count"],
+            "properties": {
+                "id": {"type": "string"},
+                "count": {"type": "integer"},
+            },
+        }
+
+        issues = validator.validate({"id": 123}, schema)
+
+        self.assertTrue(any("root: missing required field 'count'" in issue for issue in issues))
+        self.assertTrue(any("id: expected string, got int" in issue for issue in issues))
+
+    def test_reports_enum_violation_in_nested_property(self) -> None:
+        validator = RecursiveSchemaValidator()
+        schema = {
+            "type": "object",
+            "properties": {
+                "metric_name": {"type": "string", "enum": ["latency", "cost"]},
+            },
+        }
+
+        issues = validator.validate({"metric_name": "quality"}, schema)
+
+        self.assertTrue(any("metric_name: value 'quality' not in enum ['latency', 'cost']" in issue for issue in issues))
 
 
 if __name__ == "__main__":

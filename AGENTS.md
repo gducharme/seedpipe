@@ -32,3 +32,9 @@ pytest tests/ -v
 - When you change `pipeline.yaml` or any related models, run `seedpipe-compile` to regenerate `generated/` so you can see the resulting structure before coding stages.
 - Once the scaffold is regenerated, implement each stage using the compiled contracts—run `seedpipe-run` (or the appropriate stage invocation) to produce artifacts and schemas, replacing placeholders as needed before chaining the next stage.
 - Follow this inspect-compile-implement-validate pattern for every new requirement so the pipe stays consistent and reproducible.
+
+## Agentic Engineering v2
+
+- Follow `docs/agentic_engineering_v2_playbook.md` for the operational model (explore -> exploit -> delete, deterministic gates, contracted handoffs).
+- Enforce command-level behavior from `docs/agentic_command_policy.md` (lane isolation, required checks, circuit breakers, and FD workflow commands).
+- Treat agent output as untrusted until required gates pass.
