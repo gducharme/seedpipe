@@ -730,26 +730,45 @@ def _process_claim(config: WatchConfig, pipeline_id: str, claim_dir: Path) -> in
         return 1
 
 
+@dataclass(frozen=True)
+class BundleLifecycle:
+    config: WatchConfig
+    pipeline_id: str
+
+    def reclaim_stale_claims(self) -> None:
+        _reclaim_stale_claims(self.config, self.pipeline_id)
+
+    def reject(self, bundle_or_claim: Path, reason: str) -> None:
+        _reject_claim(self.config, self.pipeline_id, bundle_or_claim, reason)
+
+    def claim(self, bundle: Path, watcher_id: str) -> Path | None:
+        return _claim_bundle(self.config, self.pipeline_id, bundle, watcher_id)
+
+    def process(self, claim: Path) -> int:
+        return _process_claim(self.config, self.pipeline_id, claim)
+
+
 def _scan_once(config: WatchConfig, watcher_id: str) -> int:
     pipelines = _discover_pipelines(config.inbox_root) if config.pipeline == "all" else [config.pipeline]
     had_failure = False
     processed = 0
     for pipeline_id in pipelines:
-        _reclaim_stale_claims(config, pipeline_id)
+        lifecycle = BundleLifecycle(config=config, pipeline_id=pipeline_id)
+        lifecycle.reclaim_stale_claims()
         bundles = _bundle_paths(config.inbox_root, pipeline_id)
         for bundle in bundles[: max(1, config.max_concurrent)]:
             valid, reason = _validate_bundle(bundle, pipeline_id)
             if not valid:
                 if reason == "bundle is not ready":
                     continue
-                _reject_claim(config, pipeline_id, bundle, reason)
+                lifecycle.reject(bundle, reason)
                 had_failure = True
                 continue
-            claim = _claim_bundle(config, pipeline_id, bundle, watcher_id)
+            claim = lifecycle.claim(bundle, watcher_id)
             if claim is None:
                 continue
             processed += 1
-            code = _process_claim(config, pipeline_id, claim)
+            code = lifecycle.process(claim)
             if code != 0:
                 had_failure = True
     published_completed_runs = _scan_completed_runs_for_outbox(config)

@@ -93,6 +93,45 @@ class TinySchemaValidator:
         return issues
 
 
+class RecursiveSchemaValidator:
+    """Generic recursive schema checker for simple JSON-schema-like dicts."""
+
+    def validate(self, data: Any, schema: dict[str, Any], path: list[str] | None = None) -> list[str]:
+        active_path = path or []
+        issues: list[str] = []
+        path_str = ".".join(active_path) if active_path else "root"
+
+        if "type" in schema:
+            expected_type = schema["type"]
+            if expected_type == "string" and not isinstance(data, str):
+                issues.append(f"{path_str}: expected string, got {type(data).__name__}")
+            elif expected_type == "number" and not isinstance(data, (int, float)):
+                issues.append(f"{path_str}: expected number, got {type(data).__name__}")
+            elif expected_type == "integer" and not isinstance(data, int):
+                issues.append(f"{path_str}: expected integer, got {type(data).__name__}")
+            elif expected_type == "boolean" and not isinstance(data, bool):
+                issues.append(f"{path_str}: expected boolean, got {type(data).__name__}")
+            elif expected_type == "array" and not isinstance(data, list):
+                issues.append(f"{path_str}: expected array, got {type(data).__name__}")
+            elif expected_type == "object" and not isinstance(data, dict):
+                issues.append(f"{path_str}: expected object, got {type(data).__name__}")
+
+        if "enum" in schema and data not in schema["enum"]:
+            issues.append(f"{path_str}: value {data!r} not in enum {schema['enum']}")
+
+        if isinstance(data, dict) and "properties" in schema:
+            for prop_name, prop_schema in schema["properties"].items():
+                if prop_name in data:
+                    issues.extend(self.validate(data[prop_name], prop_schema, active_path + [prop_name]))
+
+        if isinstance(data, dict) and "required" in schema:
+            for req_field in schema["required"]:
+                if req_field not in data:
+                    issues.append(f"{path_str}: missing required field '{req_field}'")
+
+        return issues
+
+
 def _parse_simple_yaml(path: Path) -> dict[str, dict[str, str]]:
     mapping: dict[str, dict[str, str]] = {}
     current: str | None = None

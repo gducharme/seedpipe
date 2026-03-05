@@ -601,3 +601,10 @@ print(result["pipeline_id"], result["output_dir"])
 - Implement: Edit stage code under `src/stages/*.py`; never hand-edit `generated/`.
 - Validate: Run `seedpipe-run` to execute the compiled flow; runtime enforces declared inputs/outputs and schema contracts. For watcher mode, use `seedpipe-watch`.
 - Iterate: After any pipeline/spec change, re-run compile; after implementation changes, re-run run/tests.
+
+## Agentic Engineering v2 Workflow
+
+- Playbook: `docs/agentic_engineering_v2_playbook.md`
+- Command policy: `docs/agentic_command_policy.md`
+
+Use these documents to run deterministic multi-agent work with isolated lanes, strict validation gates, and explicit handoff contracts.

@@ -23,11 +23,8 @@ RUN_MANIFEST_TEMPLATE = "run_manifest_template.json"
 RUN_MANIFEST_NAME = ".seedpipe_run_manifest.json"
 
 
-def _mount_generated_package(generated_dir: Path) -> None:
-    import seedpipe  # noqa: F401
-
-    package_name = "seedpipe.generated"
-    package_path = str(generated_dir.resolve())
+def _mount_namespace_package(package_name: str, package_dir: Path) -> None:
+    package_path = str(package_dir.resolve())
     package = sys.modules.get(package_name)
     if package is None:
         package = types.ModuleType(package_name)
@@ -41,24 +38,18 @@ def _mount_generated_package(generated_dir: Path) -> None:
         package.__path__ = [package_path, *existing_paths]  # type: ignore[attr-defined]
 
 
+def _mount_generated_package(generated_dir: Path) -> None:
+    import seedpipe  # noqa: F401
+
+    _mount_namespace_package("seedpipe.generated", generated_dir)
+
+
 def _mount_local_src_package(pipe_root: Path) -> None:
-    package_name = "seedpipe.src"
     src_dir = pipe_root / "src"
     if not src_dir.exists() or not src_dir.is_dir():
         return
 
-    package_path = str(src_dir.resolve())
-    package = sys.modules.get(package_name)
-    if package is None:
-        package = types.ModuleType(package_name)
-        package.__path__ = [package_path]  # type: ignore[attr-defined]
-        package.__package__ = package_name
-        sys.modules[package_name] = package
-        return
-
-    existing_paths = list(getattr(package, "__path__", []))
-    if package_path not in existing_paths:
-        package.__path__ = [package_path, *existing_paths]  # type: ignore[attr-defined]
+    _mount_namespace_package("seedpipe.src", src_dir)
 
 
 def _purge_generated_modules() -> None:
