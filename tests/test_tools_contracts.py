@@ -5,7 +5,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-<<<<<<< HEAD
 from seedpipe.tools.contracts import (
     RecursiveSchemaValidator,
     TinySchemaValidator,
